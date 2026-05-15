@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual envs
+.venv/
+venv/
+env/
+.python-version
+
+# Build
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# Tests / lint caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# Participant data — NEVER commit
+Data/
+
+# Local config overrides
+config/local_*.yaml
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Claude Code — local per-machine settings (permission allowlists etc.)
+.claude/settings.local.json
+
+# uv lockfile is committed (do NOT add uv.lock here)

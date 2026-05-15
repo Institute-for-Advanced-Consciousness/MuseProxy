@@ -1,0 +1,182 @@
+# =============================================================================
+# MuseProxy — session defaults
+# =============================================================================
+# Loaded once at app startup. Pydantic models in src/muse_proxy/config.py
+# enforce schema. Operators may edit between sessions, never mid-session.
+# =============================================================================
+
+participant:
+  auto_suggest_next_id: true            # scan Data\ for highest P{NNN}, suggest N+1
+  id_prefix: "P"
+  id_digits: 3
+
+# -----------------------------------------------------------------------------
+# LSL outlet
+# -----------------------------------------------------------------------------
+lsl:
+  outlet_name: "MuseProxyMarkers"
+  outlet_type: "Markers"
+  # source_id is constructed at runtime as:
+  #   f"{source_id_template}_pass{pass_label}_{pid}_{yyyymmdd}"
+  # e.g. "MuseProxy_passA_P001_20260512"
+  source_id_template: "MuseProxy"
+  channel_count: 1
+  nominal_srate: 0                      # irregular rate
+  channel_format: "string"
+
+# -----------------------------------------------------------------------------
+# Pre-launch checklist — expected LSL streams visible in Lab Recorder
+# -----------------------------------------------------------------------------
+# Operator MUST edit `name` substrings to match the actual streams produced by
+# whichever Muse-streaming software is in use (BlueMuse, Petal Metrics,
+# Mind Monitor, or Athena-side software). Matched as case-insensitive substring.
+# -----------------------------------------------------------------------------
+pre_launch_streams:
+  always_required:
+    - name: "AIM"
+      description: "CGX AIM-II — ECG + 3 EMG channels"
+    - name: "MuseProxyMarkers"
+      description: "This app's marker stream"
+  muse_2:
+    - name: "Muse"
+      description: "Muse 2 — EEG / PPG / ACC / GYR"
+  muse_athena:
+    - name: "Athena"
+      description: "Muse Athena — EEG / PPG / ACC / GYR (and fNIRS if enabled)"
+
+# Additional manual confirmations the RA ticks on the pre-launch screen
+pre_launch_manual_confirmations:
+  pass_a:
+    - "Lab Recorder is running"
+    - "Lab Recorder is recording (started a fresh XDF file for Pass A)"
+    - "Participant is wearing headphones and they are comfortable"
+    - "Headset signal quality looks good"
+  pass_b:
+    - "Old Lab Recorder recording was stopped"
+    - "A NEW Lab Recorder recording was started with a Pass B filename"
+    - "New headset signal quality looks good"
+
+# -----------------------------------------------------------------------------
+# Audio
+# -----------------------------------------------------------------------------
+audio:
+  device_name_substring: null           # null = system default; or e.g. "Headphones"
+  sample_rate: 44100
+  channels: 1
+  tts_voice: "en-US-AriaNeural"         # used only at install time by generate_audio.py
+  silence_trim_threshold: 0.01          # absolute amplitude below which is "silence" for WAV trimming
+  volume_check:
+    frequency_hz: 1000
+    duration_s: 3.0
+    amplitude: 0.3                      # 0.0–1.0; conservative
+    ramp_s: 0.05                        # cosine ramp at start and end
+
+# -----------------------------------------------------------------------------
+# Settle / break periods
+# -----------------------------------------------------------------------------
+settle:
+  initial_pass_a_default_min: 5         # SOW: "several minutes"; RA-skippable
+  initial_pass_b_default_min: 2         # shorter — participant already settled
+  inter_pass_break_default_min: 5       # between Pass A end and Pass B start
+  between_block_self_paced: true        # if true, no timer — participant presses SPACE
+
+# -----------------------------------------------------------------------------
+# Blocks
+# -----------------------------------------------------------------------------
+blocks:
+  - id: 1
+    label: "baseline"
+    duration_s: 300
+    paced: false
+    instruction: |
+      Block 1 of 4: Natural breathing.
+
+      Close your eyes and breathe normally.
+      Pay gentle attention to your breath.
+
+      Press SPACE when you're ready to begin.
+
+  - id: 2
+    label: "paced_0p1Hz"
+    duration_s: 300
+    paced: true
+    rate_hz: 0.1
+    inhale_duration_s: 5.0
+    exhale_duration_s: 5.0
+    instruction: |
+      Block 2 of 4: Paced breathing.
+
+      Close your eyes.
+      Breathe in when you hear "in", out when you hear "out".
+      Each inhale and each exhale will last 5 seconds.
+
+      Press SPACE when you're ready to begin.
+
+  - id: 3
+    label: "paced_0p2Hz"
+    duration_s: 300
+    paced: true
+    rate_hz: 0.2
+    inhale_duration_s: 2.5
+    exhale_duration_s: 2.5
+    instruction: |
+      Block 3 of 4: Faster paced breathing.
+
+      Close your eyes.
+      Breathe in when you hear "in", out when you hear "out".
+      Each inhale and each exhale will last 2.5 seconds.
+
+      Press SPACE when you're ready to begin.
+
+  - id: 4
+    label: "artifact"
+    duration_s: 90
+    paced: false
+    instruction: |
+      Block 4 of 4: Artifact creation.
+
+      You'll hear audio prompts asking you to make specific
+      facial movements — blinking, eye movements, jaw clenching,
+      and so on. Follow each prompt as soon as you hear it.
+
+      Press SPACE when you're ready to begin.
+
+# -----------------------------------------------------------------------------
+# Artifact block cue schedule
+# -----------------------------------------------------------------------------
+# Times are seconds from block start. Each cue emits:
+#   artifact:<label>:start at TTS audio onset (sample-anchored)
+#   artifact:<label>:end   at (start_s + window_s) — execution window close
+# State cues (state: true) emit :start only.
+# -----------------------------------------------------------------------------
+artifact_block:
+  cues:
+    - { start_s: 0.0,  label: "eyes_open",                   spoken: "Open your eyes and keep them open",             window_s: 3.0, state: true }
+    - { start_s: 3.0,  label: "blink_slow",                  spoken: "Blink slowly several times",                    window_s: 5.0 }
+    - { start_s: 11.0, label: "blink_rapid",                 spoken: "Now blink rapidly several times",               window_s: 5.0 }
+    - { start_s: 19.0, label: "saccade_horizontal",          spoken: "Look left and right repeatedly",                window_s: 5.0 }
+    - { start_s: 27.0, label: "saccade_vertical",            spoken: "Look up and down repeatedly",                   window_s: 5.0 }
+    - { start_s: 35.0, label: "jaw_clench_left",             spoken: "Clench your jaw on the left side, then relax",  window_s: 5.0 }
+    - { start_s: 43.0, label: "jaw_clench_right",            spoken: "Clench your jaw on the right side, then relax", window_s: 5.0 }
+    - { start_s: 51.0, label: "jaw_clench_bilateral",        spoken: "Clench your whole jaw, then relax",             window_s: 5.0 }
+    - { start_s: 59.0, label: "brow_raise",                  spoken: "Raise your eyebrows",                           window_s: 5.0 }
+    - { start_s: 67.0, label: "brow_furrow",                 spoken: "Furrow your brow, then relax",                  window_s: 5.0 }
+    - { start_s: 75.0, label: "eyes_closed",                 spoken: "Now close your eyes and keep them closed",      window_s: 3.0, state: true }
+    - { start_s: 78.0, label: "jaw_clench_bilateral_closed", spoken: "Clench your whole jaw again",                   window_s: 5.0 }
+    - { start_s: 85.0, label: "brow_furrow_closed",          spoken: "Furrow your brow one more time",                window_s: 5.0 }
+
+# -----------------------------------------------------------------------------
+# UI — IACS color scheme (for institutional continuity with Jazzo)
+# -----------------------------------------------------------------------------
+ui:
+  color_purple: "#5d5179"
+  color_white: "#ffffff"
+  color_black: "#000000"
+  color_gray_light: "#e0e0e0"
+  color_gray_mid: "#888888"
+  font_family: "Arial"
+
+# -----------------------------------------------------------------------------
+# Data output
+# -----------------------------------------------------------------------------
+data_dir: "Data"

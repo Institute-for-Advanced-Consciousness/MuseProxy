@@ -1,0 +1,71 @@
+[project]
+name = "muse-proxy"
+version = "0.1.0"
+description = "Experiment control + LSL marker stream for the IACS Muse Proxy Metrics and Denoising Study"
+requires-python = ">=3.11"
+readme = "README.md"
+authors = [
+  { name = "Institute for Advanced Consciousness Studies" },
+]
+dependencies = [
+  "pylsl>=1.16,<2",
+  "sounddevice>=0.4.7,<0.5",
+  "soundfile>=0.12,<1",
+  "numpy>=1.26,<3",
+  "pydantic>=2.5,<3",
+  "PyYAML>=6.0,<7",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[dependency-groups]
+dev = [
+  "pytest>=7.4,<9",
+  "pytest-cov>=4.1,<7",
+  "ruff>=0.5,<1",
+  "pyxdf>=1.16,<2",
+  "edge-tts>=6.1,<8",   # install-time only, used by scripts/generate_audio.py
+]
+
+# -----------------------------------------------------------------------------
+# Ruff
+# -----------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+  "E501",  # line length — handled by formatter
+  "B008",  # function call in default argument — common Tk pattern
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]  # asserts are fine in tests
+
+# -----------------------------------------------------------------------------
+# Pytest
+# -----------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+  "-q",
+  "--tb=short",
+  "--strict-markers",
+]
+markers = [
+  "e2e: end-to-end test with real LSL outlet (skipped in CI if no audio device)",
+  "audio_timing: opt-in test requiring physical audio loopback",
+]
+filterwarnings = [
+  "error",
+  "ignore::DeprecationWarning:pkg_resources.*",
+  "ignore::DeprecationWarning:google.*",
+]
