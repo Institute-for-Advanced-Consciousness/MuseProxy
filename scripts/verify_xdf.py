@@ -3,16 +3,21 @@
 Usage:
     uv run python scripts/verify_xdf.py path\\to\\P001_passA_muse2.xdf
 
-Loads the XDF, finds the ``MuseProxyMarkers`` stream, and prints:
+Loads the XDF and reports:
   * Coverage table — every expected marker family vs. observed count.
   * Per breathing block — cycle count vs. expected, mean inter-inhale
-    interval vs. target (1 / rate_hz), SD.
+    interval vs. target (1 / rate_hz), SD. Re-run attempts are audited
+    separately (a block may legitimately appear more than once).
   * Artifact block — every expected cue label vs. presence, mean
     cue-window duration.
+  * Stream coverage — for every block window, whether each continuous
+    data stream (EEG / PPG / ECG / ...) actually has samples spanning
+    the block. This is what catches a Muse PPG dropout that the marker
+    audit alone cannot see.
   * Pass detection — single ``pass=A|B`` label across markers (sanity
     check that we didn't mix passes in one file).
 
-Exit 0 = clean; exit 1 = at least one violation worth investigating.
+Exit 0 = clean; exit 1 = at least one FAIL worth investigating.
 """
 
 from __future__ import annotations
@@ -55,6 +60,15 @@ EXPECTED_FAMILIES = (
     "breath:exhale",
 )
 
+# A continuous data stream must start within this many seconds of a block's
+# start (and end no earlier than this before the block's end) to count as
+# covering it. Slack absorbs LSL clock jitter and start/stop ordering.
+COVERAGE_TOLERANCE_S = 1.0
+# An internal gap longer than this inside a block window is flagged.
+GAP_WARN_S = 2.0
+# Streams slower than this are not coverage-audited (battery, markers).
+MIN_CONTINUOUS_SRATE_HZ = 16.0
+
 
 def _matches_family(marker: str, family: str) -> bool:
     return marker == family or marker.startswith(family + ":")
@@ -87,28 +101,104 @@ def parse_payload(marker: str) -> tuple[str, dict[str, str]]:
     return ":".join(prefix_tokens), kvs
 
 
-def load_marker_stream(xdf_path: Path, stream_name: str = "MuseProxyMarkers") -> list[tuple[str, float]]:
-    """Load the named string-marker stream as a list of (marker, timestamp)."""
+def _attempt_of(kv: dict[str, str]) -> int:
+    """Return the re-run attempt number from a marker payload (default 1)."""
+    try:
+        return int(kv.get("attempt", "1"))
+    except (TypeError, ValueError):
+        return 1
+
+
+# ---------------------------------------------------------------------------
+# XDF loading
+# ---------------------------------------------------------------------------
+
+
+def _load_xdf(xdf_path: Path) -> list[dict[str, Any]]:
     import pyxdf
 
     streams, _header = pyxdf.load_xdf(str(xdf_path))
+    return list(streams)
+
+
+def _markers_from_streams(
+    streams: list[dict[str, Any]], stream_name: str
+) -> list[tuple[str, float]]:
     out: list[tuple[str, float]] = []
     for s in streams:
-        info = s.get("info", {})
-        if not info:
-            continue
+        info = s.get("info", {}) or {}
         names = info.get("name", []) or []
         if not names or names[0] != stream_name:
             continue
-        samples = s.get("time_series", []) or []
-        ts = s.get("time_stamps", []) or []
-        for sample, t in zip(samples, ts, strict=False):
-            if isinstance(sample, list) or hasattr(sample, "__iter__"):
-                m = str(sample[0])
+        # NOTE: ``x or []`` is wrong here — time_series/time_stamps come back
+        # as numpy arrays, and a numpy array in a boolean context raises
+        # "ambiguous truth value". Test for None explicitly.
+        samples = s.get("time_series")
+        if samples is None:
+            samples = []
+        ts = s.get("time_stamps")
+        if ts is None:
+            ts = []
+        for sample, t in zip(samples, ts):
+            if isinstance(sample, str):
+                m = sample
+            elif hasattr(sample, "__len__"):
+                m = str(sample[0]) if len(sample) else ""
             else:
                 m = str(sample)
             out.append((m, float(t)))
     return out
+
+
+def load_marker_stream(
+    xdf_path: Path, stream_name: str = "MuseProxyMarkers"
+) -> list[tuple[str, float]]:
+    """Load the named string-marker stream as a list of (marker, timestamp)."""
+    return _markers_from_streams(_load_xdf(Path(xdf_path)), stream_name)
+
+
+def load_data_streams(
+    streams_or_path: list[dict[str, Any]] | Path | str,
+    *,
+    min_srate: float = MIN_CONTINUOUS_SRATE_HZ,
+) -> list[dict[str, Any]]:
+    """Return the continuous (non-marker) data streams worth coverage-auditing.
+
+    Each entry: ``{name, type, nominal_srate, time_stamps}``. Streams
+    slower than ``min_srate`` (battery, markers) are skipped.
+    """
+    if isinstance(streams_or_path, (str, Path)):
+        streams = _load_xdf(Path(streams_or_path))
+    else:
+        streams = streams_or_path
+    out: list[dict[str, Any]] = []
+    for s in streams:
+        info = s.get("info", {}) or {}
+        names = info.get("name", []) or []
+        types = info.get("type", []) or []
+        name = names[0] if names else "?"
+        stype = types[0] if types else "?"
+        if str(stype).lower() in ("markers", "marker"):
+            continue
+        srate_raw = (info.get("nominal_srate", ["0"]) or ["0"])[0]
+        try:
+            srate = float(srate_raw)
+        except (TypeError, ValueError):
+            srate = 0.0
+        if srate < min_srate:
+            continue
+        ts = s.get("time_stamps")
+        if ts is None:
+            ts = []
+        out.append(
+            {"name": name, "type": stype, "nominal_srate": srate, "time_stamps": ts}
+        )
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Audits — markers
+# ---------------------------------------------------------------------------
 
 
 def audit_pass_purity(markers: list[tuple[str, float]]) -> tuple[str | None, list[str]]:
@@ -142,12 +232,12 @@ def audit_coverage(markers: list[tuple[str, float]]) -> Counter[str]:
 def audit_breathing(
     markers: list[tuple[str, float]], cfg: Config
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """For each paced block, verify cycle count and ISI."""
+    """For each paced block (and each re-run attempt), verify cycle count + ISI."""
     summaries: list[dict[str, Any]] = []
     problems: list[str] = []
 
-    # Group inhale markers by block.
-    per_block: dict[int, list[float]] = defaultdict(list)
+    # Group inhale markers by (block, attempt).
+    per_block: dict[tuple[int, int], list[float]] = defaultdict(list)
     for m, t in markers:
         if not m.startswith("breath:inhale"):
             continue
@@ -156,46 +246,50 @@ def audit_breathing(
             block_id = int(kv.get("block", "-1"))
         except ValueError:
             continue
-        per_block[block_id].append(t)
+        per_block[(block_id, _attempt_of(kv))].append(t)
 
     for block in cfg.blocks:
         if not block.paced:
             continue
-        inhale_ts = sorted(per_block.get(block.id, []))
-        expected_n = int(round(block.duration_s * (block.rate_hz or 0)))
-        observed_n = len(inhale_ts)
-        if observed_n != expected_n:
-            problems.append(
-                f"FAIL: block {block.id} inhale count {observed_n} != expected {expected_n}"
-            )
-        isis = (
-            [b - a for a, b in zip(inhale_ts[:-1], inhale_ts[1:], strict=True)]
-            if len(inhale_ts) >= 2
-            else []
-        )
-        target_isi = 1.0 / (block.rate_hz or 1.0)
-        mean_isi = statistics.fmean(isis) if isis else float("nan")
-        sd_isi = statistics.stdev(isis) if len(isis) > 1 else 0.0
-        summaries.append(
-            {
-                "block_id": block.id,
-                "label": block.label,
-                "rate_hz": block.rate_hz,
-                "expected_cycles": expected_n,
-                "observed_cycles": observed_n,
-                "target_isi_s": target_isi,
-                "mean_isi_s": mean_isi,
-                "sd_isi_s": sd_isi,
-            }
-        )
-        if isis:
-            err = abs(mean_isi - target_isi)
-            # Audio-anchored markers should be tight — < 50 ms tolerance.
-            if err > 0.050:
+        attempts = sorted({a for (bid, a) in per_block if bid == block.id}) or [1]
+        for attempt in attempts:
+            inhale_ts = sorted(per_block.get((block.id, attempt), []))
+            expected_n = int(round(block.duration_s * (block.rate_hz or 0)))
+            observed_n = len(inhale_ts)
+            tag = f"block {block.id}" + (f" attempt {attempt}" if attempt > 1 else "")
+            if observed_n != expected_n:
                 problems.append(
-                    f"WARN: block {block.id} mean ISI {mean_isi:.3f}s differs "
-                    f"from target {target_isi:.3f}s by {err * 1000:.1f}ms"
+                    f"FAIL: {tag} inhale count {observed_n} != expected {expected_n}"
                 )
+            isis = (
+                [b - a for a, b in zip(inhale_ts[:-1], inhale_ts[1:], strict=True)]
+                if len(inhale_ts) >= 2
+                else []
+            )
+            target_isi = 1.0 / (block.rate_hz or 1.0)
+            mean_isi = statistics.fmean(isis) if isis else float("nan")
+            sd_isi = statistics.stdev(isis) if len(isis) > 1 else 0.0
+            summaries.append(
+                {
+                    "block_id": block.id,
+                    "attempt": attempt,
+                    "label": block.label,
+                    "rate_hz": block.rate_hz,
+                    "expected_cycles": expected_n,
+                    "observed_cycles": observed_n,
+                    "target_isi_s": target_isi,
+                    "mean_isi_s": mean_isi,
+                    "sd_isi_s": sd_isi,
+                }
+            )
+            if isis:
+                err = abs(mean_isi - target_isi)
+                # Audio-anchored markers should be tight — < 50 ms tolerance.
+                if err > 0.050:
+                    problems.append(
+                        f"WARN: {tag} mean ISI {mean_isi:.3f}s differs "
+                        f"from target {target_isi:.3f}s by {err * 1000:.1f}ms"
+                    )
 
     return summaries, problems
 
@@ -250,6 +344,129 @@ def audit_artifact_block(
 
 
 # ---------------------------------------------------------------------------
+# Audits — data-stream coverage
+# ---------------------------------------------------------------------------
+
+
+def block_windows(markers: list[tuple[str, float]]) -> list[dict[str, Any]]:
+    """Pair block_start / block_end markers into per-(block, attempt) windows."""
+    starts: dict[tuple[int, int], tuple[str, float]] = {}
+    ends: dict[tuple[int, int], float] = {}
+    for m, t in markers:
+        pre, kv = parse_payload(m)
+        if pre not in ("block_start", "block_end"):
+            continue
+        try:
+            bid = int(kv.get("block", "-1"))
+        except ValueError:
+            continue
+        key = (bid, _attempt_of(kv))
+        if pre == "block_start":
+            starts[key] = (kv.get("label", "?"), t)
+        else:
+            ends[key] = t
+    windows: list[dict[str, Any]] = []
+    for key in sorted(starts):
+        label, t0 = starts[key]
+        windows.append(
+            {
+                "block_id": key[0],
+                "attempt": key[1],
+                "label": label,
+                "t_start": t0,
+                "t_end": ends.get(key),
+            }
+        )
+    return windows
+
+
+def audit_stream_coverage(
+    data_streams: list[dict[str, Any]],
+    markers: list[tuple[str, float]],
+    *,
+    tolerance_s: float = COVERAGE_TOLERANCE_S,
+    gap_warn_s: float = GAP_WARN_S,
+) -> tuple[dict[str, Any], list[str]]:
+    """For every block window, check each data stream actually covers it.
+
+    Catches the failure the marker audit cannot see: a headset stream
+    that stopped partway through (e.g. Muse PPG/optics dropping out).
+    """
+    import numpy as np
+
+    problems: list[str] = []
+    windows = block_windows(markers)
+    rows: list[dict[str, Any]] = []
+
+    for win in windows:
+        bid, attempt, label = win["block_id"], win["attempt"], win["label"]
+        t0, t1 = win["t_start"], win["t_end"]
+        tag = f"block {bid}" + (f" attempt {attempt}" if attempt > 1 else "")
+        if t1 is None:
+            problems.append(f"FAIL: {tag} ({label}) has no block_end marker")
+            continue
+        for ds in data_streams:
+            name, stype = ds["name"], ds["type"]
+            ts = np.asarray(ds["time_stamps"], dtype=float)
+            row: dict[str, Any] = {
+                "block_id": bid,
+                "attempt": attempt,
+                "label": label,
+                "stream": name,
+                "type": stype,
+            }
+            if ts.size == 0:
+                problems.append(
+                    f"FAIL: {tag} ({label}) — stream {name!r} ({stype}) has no samples"
+                )
+                row.update(covered=False, missing_start_s=t1 - t0, missing_end_s=0.0,
+                           max_gap_s=None)
+                rows.append(row)
+                continue
+            first, last = float(ts[0]), float(ts[-1])
+            missing_start = max(0.0, first - t0)
+            missing_end = max(0.0, t1 - last)
+            # Largest internal gap inside the window.
+            lo = int(np.searchsorted(ts, t0))
+            hi = int(np.searchsorted(ts, t1))
+            seg = ts[max(0, lo - 1) : hi + 1]
+            max_gap = float(np.max(np.diff(seg))) if seg.size >= 2 else (t1 - t0)
+            covered = missing_start <= tolerance_s and missing_end <= tolerance_s
+            row.update(
+                covered=covered,
+                missing_start_s=missing_start,
+                missing_end_s=missing_end,
+                max_gap_s=max_gap,
+            )
+            rows.append(row)
+            if missing_start > tolerance_s:
+                problems.append(
+                    f"FAIL: {tag} ({label}) — stream {name!r} ({stype}) "
+                    f"starts {missing_start:.1f}s into the block"
+                )
+            if missing_end > tolerance_s:
+                problems.append(
+                    f"FAIL: {tag} ({label}) — stream {name!r} ({stype}) "
+                    f"ends {missing_end:.1f}s before the block finished"
+                )
+            if covered and max_gap > gap_warn_s:
+                problems.append(
+                    f"WARN: {tag} ({label}) — stream {name!r} ({stype}) "
+                    f"has a {max_gap:.1f}s internal gap"
+                )
+
+    n_fail = sum(1 for r in rows if not r["covered"])
+    return {
+        "n_windows": len(windows),
+        "n_streams": len(data_streams),
+        "n_checks": len(rows),
+        "n_uncovered": n_fail,
+        "windows": windows,
+        "rows": rows,
+    }, problems
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -276,17 +493,29 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     cfg = load_config(args.config)
-    markers = load_marker_stream(xdf_path, stream_name=args.stream_name)
+    try:
+        streams = _load_xdf(xdf_path)
+    except Exception as e:  # noqa: BLE001
+        print(f"FAIL: could not load XDF: {e}", file=sys.stderr)
+        return 1
+    markers = _markers_from_streams(streams, args.stream_name)
     if not markers:
         print(f"FAIL: no markers found in stream {args.stream_name!r}", file=sys.stderr)
         return 1
+    data_streams = load_data_streams(streams)
 
     pass_label, pass_problems = audit_pass_purity(markers)
     coverage = audit_coverage(markers)
     breathing, breathing_problems = audit_breathing(markers, cfg)
     artifact, artifact_problems = audit_artifact_block(markers, cfg)
+    stream_cov, stream_cov_problems = audit_stream_coverage(data_streams, markers)
 
-    all_problems = pass_problems + breathing_problems + artifact_problems
+    all_problems = (
+        pass_problems
+        + breathing_problems
+        + artifact_problems
+        + stream_cov_problems
+    )
 
     if args.json:
         out = {
@@ -296,6 +525,7 @@ def main(argv: list[str] | None = None) -> int:
             "coverage": dict(coverage),
             "breathing": breathing,
             "artifact": artifact,
+            "stream_coverage": stream_cov,
             "problems": all_problems,
         }
         print(json.dumps(out, indent=2, default=str))
@@ -313,18 +543,40 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print("Breathing blocks")
     for b in breathing:
+        tag = f"block {b['block_id']}" + (
+            f" attempt {b['attempt']}" if b["attempt"] > 1 else ""
+        )
         print(
-            f"  block {b['block_id']} ({b['label']}): "
+            f"  {tag} ({b['label']}): "
             f"{b['observed_cycles']}/{b['expected_cycles']} cycles, "
             f"mean ISI {b['mean_isi_s']:.3f}s (target {b['target_isi_s']:.3f}s), "
             f"SD {b['sd_isi_s']:.3f}s"
         )
     print()
     print("Artifact block")
-    print(f"  expected labels:        {len(artifact['expected_labels'])}")
+    print(f"  expected labels:         {len(artifact['expected_labels'])}")
     print(f"  observed :start markers: {len(artifact['observed_starts'])}")
     print(f"  observed :end markers:   {len(artifact['observed_ends'])}")
-    print(f"  mean window duration:   {artifact['mean_window_s']:.3f}s")
+    print(f"  mean window duration:    {artifact['mean_window_s']:.3f}s")
+    print()
+    print("Stream coverage")
+    print(
+        f"  {stream_cov['n_checks']} block×stream checks, "
+        f"{stream_cov['n_uncovered']} uncovered "
+        f"({stream_cov['n_streams']} data streams, "
+        f"{stream_cov['n_windows']} block windows)"
+    )
+    for r in stream_cov["rows"]:
+        if r["covered"]:
+            continue
+        tag = f"block {r['block_id']}" + (
+            f" attempt {r['attempt']}" if r["attempt"] > 1 else ""
+        )
+        print(
+            f"  UNCOVERED  {tag} ({r['label']})  {r['stream']} ({r['type']})  "
+            f"missing {r['missing_start_s']:.0f}s@start / "
+            f"{r['missing_end_s']:.0f}s@end"
+        )
 
     print()
     if all_problems:

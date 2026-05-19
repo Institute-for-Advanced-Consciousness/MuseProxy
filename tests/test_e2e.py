@@ -124,6 +124,12 @@ def test_full_visit_walkthrough(shared_app: Any, tmp_path: Path) -> None:
         intake._open_services(payload)
         # Replace the AudioScheduler with the stub.
         shared_app.audio_scheduler = _StubScheduler()
+        # No real headset streams in the test environment — disable the
+        # stream-health monitor so the pre-block gate doesn't trap the
+        # walkthrough. (The gate itself is covered in test_stream_recovery.)
+        if shared_app.monitor is not None:
+            shared_app.monitor.stop()
+        shared_app.monitor = None
     except BaseException:
         cm_intake.stop()
         cm_switch.stop()
@@ -206,6 +212,10 @@ def test_full_visit_walkthrough(shared_app: Any, tmp_path: Path) -> None:
         ps._refresh_continue()
         ps._on_continue()
         assert shared_app.current_stage == "pre_launch"
+        # Pass B opened a fresh monitor — disable it for the walkthrough too.
+        if shared_app.monitor is not None:
+            shared_app.monitor.stop()
+        shared_app.monitor = None
         # Pass B pre-launch.
         pre_launch.on_enter()
         for v in pre_launch._stream_vars + pre_launch._confirmation_vars:

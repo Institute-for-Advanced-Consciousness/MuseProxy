@@ -154,10 +154,18 @@ class BlockRecord:
     status: str = "in_progress"  # 'in_progress' | 'completed' | 'aborted'
     events: list[dict[str, Any]] = field(default_factory=list)
     notes: str = ""
+    # Re-run attempt: 1 for the first run of this block; 2+ if the RA
+    # re-ran it after a stream dropout. Earlier attempts are kept, not
+    # overwritten — the analyst picks the attempt with full coverage.
+    attempt: int = 1
+    # Worst per-stream health observed during the block (set by the
+    # block stage from the StreamHealthMonitor's window report).
+    stream_health: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "block_id": self.block_id,
+            "attempt": self.attempt,
             "label": self.label,
             "duration_planned_s": self.duration_planned_s,
             "start_lsl": self.start_lsl,
@@ -166,6 +174,7 @@ class BlockRecord:
             "end_iso": self.end_iso,
             "duration_actual_s": self.duration_actual_s,
             "status": self.status,
+            "stream_health": self.stream_health,
             "events": list(self.events),
             "notes": self.notes,
         }
@@ -229,6 +238,7 @@ class PassWriter:
         start_lsl: float,
         *,
         start_iso: str | None = None,
+        attempt: int = 1,
     ) -> BlockRecord:
         rec = BlockRecord(
             block_id=block_id,
@@ -236,6 +246,7 @@ class PassWriter:
             duration_planned_s=duration_planned_s,
             start_lsl=start_lsl,
             start_iso=start_iso or _utc_now_iso(),
+            attempt=attempt,
         )
         self.blocks.append(rec)
         self._refresh_partial()
@@ -322,13 +333,17 @@ class PassWriter:
         atomic_write_json(self._partial_path, self._session_dict())
 
     def _write_block_csv(self, rec: BlockRecord) -> None:
-        path = self.dir / f"block_{rec.block_id:02d}_{rec.label}.csv"
+        # Re-runs get an ``_attemptN`` suffix so a re-run never overwrites
+        # the first attempt's CSV.
+        suffix = f"_attempt{rec.attempt}" if rec.attempt > 1 else ""
+        path = self.dir / f"block_{rec.block_id:02d}_{rec.label}{suffix}.csv"
         rows: list[dict[str, Any]] = []
         # First row: block summary.
         rows.append(
             {
                 "kind": "block",
                 "block_id": rec.block_id,
+                "attempt": rec.attempt,
                 "label": rec.label,
                 "duration_planned_s": rec.duration_planned_s,
                 "start_lsl": rec.start_lsl,
@@ -348,6 +363,7 @@ class PassWriter:
                 {
                     "kind": "event",
                     "block_id": rec.block_id,
+                    "attempt": rec.attempt,
                     "label": rec.label,
                     "duration_planned_s": "",
                     "start_lsl": "",
@@ -364,6 +380,7 @@ class PassWriter:
         fieldnames = [
             "kind",
             "block_id",
+            "attempt",
             "label",
             "duration_planned_s",
             "start_lsl",

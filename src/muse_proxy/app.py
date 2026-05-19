@@ -40,6 +40,7 @@ from .stages.intake import IntakeFrame
 from .stages.pass_switch import PassSwitchFrame
 from .stages.pre_launch import PreLaunchFrame
 from .stages.settle import SettleFrame
+from .stages.stream_recovery import StreamRecoveryFrame
 from .stages.volume_check import VolumeCheckFrame
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ _STAGE_CLASSES: tuple[type[StageFrame], ...] = (
     BlockBreathingFrame,
     BlockArtifactFrame,
     BetweenBlockSettleFrame,
+    StreamRecoveryFrame,
     PassSwitchFrame,
     CompletionFrame,
 )
@@ -112,6 +114,7 @@ class App:
         self.outlet: Any = None  # MuseProxyMarkerOutlet | None
         self.writer: Any = None  # PassWriter | None
         self.audio_scheduler: Any = None  # AudioScheduler | None
+        self.monitor: Any = None  # StreamHealthMonitor | None — per-pass
 
         # ----- visit state --------------------------------------------------
         self.participant_id: str | None = None
@@ -250,6 +253,12 @@ class App:
         logger.warning(
             "abort requested at pass=%s stage=%s", self.pass_label, self._current
         )
+        if self.monitor is not None:
+            try:
+                self.monitor.stop()
+            except Exception:  # noqa: BLE001
+                logger.exception("monitor.stop failed")
+            self.monitor = None
         if self.outlet is not None:
             try:
                 self.outlet.session_abort(pass_label=self.pass_label, stage=self._current or "?")

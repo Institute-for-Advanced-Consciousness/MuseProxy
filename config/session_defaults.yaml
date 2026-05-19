@@ -25,24 +25,39 @@ lsl:
   channel_format: "string"
 
 # -----------------------------------------------------------------------------
-# Pre-launch checklist — expected LSL streams visible in Lab Recorder
+# Pre-launch checklist + live stream-health monitor — expected LSL streams
 # -----------------------------------------------------------------------------
 # Operator MUST edit `name` substrings to match the actual streams produced by
 # whichever Muse-streaming software is in use (BlueMuse, Petal Metrics,
 # Mind Monitor, or Athena-side software). Matched as case-insensitive substring.
+#
+# `type` is the LSL stream type. The live stream-health monitor matches on
+# name substring AND type, so EEG and PPG are tracked separately — a Muse PPG
+# dropout while EEG keeps flowing is then detected per-stream. Each EEG/PPG
+# entry is also a separate RA checkbox on the pre-launch screen.
 # -----------------------------------------------------------------------------
 pre_launch_streams:
   always_required:
     - name: "AIM"
-      description: "CGX AIM-II — ECG + 3 EMG channels"
+      type: "EEG"
+      description: "CGX AIM-II — ECG + EMG + Resp + PPG ground truth"
     - name: "MuseProxyMarkers"
+      type: "Markers"
       description: "This app's marker stream"
   muse_2:
     - name: "Muse"
-      description: "Muse 2 — EEG / PPG / ACC / GYR"
+      type: "EEG"
+      description: "Muse 2 — EEG (TP9 / AF7 / AF8 / TP10)"
+    - name: "Muse"
+      type: "PPG"
+      description: "Muse 2 — PPG (optical pulse)"
   muse_athena:
-    - name: "Athena"
-      description: "Muse Athena — EEG / PPG / ACC / GYR (and fNIRS if enabled)"
+    - name: "Muse"
+      type: "EEG"
+      description: "Muse Athena — EEG (TP9 / AF7 / AF8 / TP10)"
+    - name: "Muse"
+      type: "PPG"
+      description: "Muse Athena — PPG / optics"
 
 # Additional manual confirmations the RA ticks on the pre-launch screen
 pre_launch_manual_confirmations:

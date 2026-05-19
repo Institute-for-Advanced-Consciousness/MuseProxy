@@ -22,6 +22,7 @@ from .. import theme
 from ..breathing import build_paced_schedule
 from ..config import REPO_ROOT
 from ._base import StageFrame
+from .stream_recovery import block_window_report
 
 logger = logging.getLogger(__name__)
 
@@ -67,12 +68,16 @@ class BlockBreathingFrame(StageFrame):
         self._playback: Any = None
         self._tts_handle: Any = None
         self._closed = False
+        self._attempt: int = 1
+        self._health_token: float | None = None
+        self._health_report: dict[str, str] = {}
 
     def on_enter(self, **payload: Any) -> None:
         block_id = payload.get("block_id")
         if block_id is None:
             raise ValueError("block_breathing requires block_id payload")
         self._block_id = int(block_id)
+        self._attempt = int(payload.get("attempt", 1))
         self._closed = False
         self._events = []
         # Reset playback / handle / record state so prior blocks don't
@@ -82,6 +87,8 @@ class BlockBreathingFrame(StageFrame):
         self._block_record = None
         self._block_start_lsl = None
         self._block_start_monotonic = None
+        self._health_token = None
+        self._health_report = {}
 
         cfg = getattr(self.app, "config", None)
         if cfg is None:
@@ -195,12 +202,15 @@ class BlockBreathingFrame(StageFrame):
 
         self._block_start_lsl = pylsl.local_clock()
         self._block_start_monotonic = time.monotonic()
+        # The stream-health window for this block opens at block start.
+        self._health_token = self._block_start_lsl
 
         outlet = self.app.outlet
         writer = self.app.writer
         if writer is not None:
             self._block_record = writer.start_block(
-                self._block_id, block.label, block.duration_s, self._block_start_lsl
+                self._block_id, block.label, block.duration_s,
+                self._block_start_lsl, attempt=self._attempt,
             )
         if outlet is not None:
             try:
@@ -209,6 +219,7 @@ class BlockBreathingFrame(StageFrame):
                     label=block.label,
                     pass_label=self.app.pass_label,
                     duration_planned_s=block.duration_s,
+                    attempt=self._attempt,
                 )
                 self._events.append(
                     {"label": "block_start", "kind": "marker",
@@ -236,6 +247,7 @@ class BlockBreathingFrame(StageFrame):
         outlet = self.app.outlet
         pass_label = self.app.pass_label
         block_id = self._block_id
+        attempt = self._attempt
 
         schedule = build_paced_schedule(
             rate_hz=block.rate_hz,
@@ -252,7 +264,8 @@ class BlockBreathingFrame(StageFrame):
             if outlet is not None:
                 try:
                     outlet.breath("inhale", block_id=block_id, cycle=cycle,
-                                  pass_label=pass_label, lsl_timestamp=lsl_ts)
+                                  pass_label=pass_label, lsl_timestamp=lsl_ts,
+                                  attempt=attempt)
                 except Exception:  # noqa: BLE001
                     logger.exception("breath:inhale marker failed")
             self._events.append(
@@ -271,7 +284,8 @@ class BlockBreathingFrame(StageFrame):
             if outlet is not None:
                 try:
                     outlet.breath("exhale", block_id=block_id, cycle=cycle,
-                                  pass_label=pass_label, lsl_timestamp=lsl_ts)
+                                  pass_label=pass_label, lsl_timestamp=lsl_ts,
+                                  attempt=attempt)
                 except Exception:  # noqa: BLE001
                     logger.exception("breath:exhale marker failed")
             self._events.append(
@@ -340,6 +354,8 @@ class BlockBreathingFrame(StageFrame):
         end_lsl = pylsl.local_clock()
         outlet = self.app.outlet
         writer = self.app.writer
+        # Worst per-stream health observed across this block window.
+        self._health_report = block_window_report(self.app, self._health_token)
         if outlet is not None:
             try:
                 outlet.block_end(
@@ -347,11 +363,13 @@ class BlockBreathingFrame(StageFrame):
                     label=self._block_label,
                     pass_label=self.app.pass_label,
                     duration_actual_s=end_lsl - self._block_start_lsl,
+                    attempt=self._attempt,
                 )
             except Exception:  # noqa: BLE001
                 logger.exception("block_end marker failed")
         if writer is not None and self._block_record is not None:
             try:
+                self._block_record.stream_health = self._health_report or None
                 writer.end_block(
                     self._block_record, end_lsl, events=self._events,
                     status="completed",
@@ -369,5 +387,9 @@ class BlockBreathingFrame(StageFrame):
             return
         if self._block_id is None:
             return
-        next_id = self._block_id  # passed to between_block_settle
-        self.app.show_stage("between_block_settle", after_block=next_id)
+        self.app.show_stage(
+            "between_block_settle",
+            after_block=self._block_id,
+            attempt=self._attempt,
+            health_report=self._health_report,
+        )

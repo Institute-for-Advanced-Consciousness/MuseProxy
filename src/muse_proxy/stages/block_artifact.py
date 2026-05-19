@@ -18,6 +18,7 @@ from .. import theme
 from ..artifacts import build_artifact_schedule
 from ..config import REPO_ROOT
 from ._base import StageFrame
+from .stream_recovery import block_window_report
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,9 @@ class BlockArtifactFrame(StageFrame):
         self._playback: Any = None
         self._tick_after: str | None = None
         self._closed = False
+        self._attempt: int = 1
+        self._health_token: float | None = None
+        self._health_report: dict[str, str] = {}
 
     def on_enter(self, **payload: Any) -> None:
         cfg = getattr(self.app, "config", None)
@@ -69,6 +73,7 @@ class BlockArtifactFrame(StageFrame):
             return
         block = cfg.block_by_id(4)
         self._duration_planned_s = block.duration_s
+        self._attempt = int(payload.get("attempt", 1))
         self._events = []
         self._closed = False
         # Reset playback state so a Pass B run doesn't see a stale handle
@@ -77,6 +82,8 @@ class BlockArtifactFrame(StageFrame):
         self._block_record = None
         self._block_start_lsl = None
         self._block_start_monotonic = None
+        self._health_token = None
+        self._health_report = {}
 
         # Pre-roll: emit block_start at the moment audio playback starts.
         self._launch()
@@ -95,6 +102,7 @@ class BlockArtifactFrame(StageFrame):
         cfg = self.app.config
         outlet = self.app.outlet
         pass_label = self.app.pass_label
+        attempt = self._attempt
 
         sound_dir = REPO_ROOT / "assets" / "sounds"
 
@@ -104,10 +112,12 @@ class BlockArtifactFrame(StageFrame):
             )
             # Even without audio, record a block marker so analysts can find the gap.
             self._block_start_lsl = pylsl.local_clock()
+            self._health_token = self._block_start_lsl
             if outlet is not None:
                 outlet.block_start(block_id=4, label="artifact",
                                    pass_label=pass_label,
-                                   duration_planned_s=self._duration_planned_s)
+                                   duration_planned_s=self._duration_planned_s,
+                                   attempt=attempt)
             self._block_start_monotonic = time.monotonic()
             self._tick()
             return
@@ -127,15 +137,15 @@ class BlockArtifactFrame(StageFrame):
         def on_block_start(t0_lsl: float) -> None:
             self._block_start_lsl = t0_lsl
             self._block_start_monotonic = time.monotonic()
+            # The stream-health window for this block opens at block start.
+            self._health_token = t0_lsl
             if outlet is not None:
+                payload = {"block": 4, "label": "artifact", "pass": pass_label,
+                           "duration_planned_s": self._duration_planned_s}
+                if attempt > 1:
+                    payload["attempt"] = attempt
                 try:
-                    outlet.push(
-                        "block_start",
-                        {"block": 4, "label": "artifact",
-                         "pass": pass_label,
-                         "duration_planned_s": self._duration_planned_s},
-                        lsl_timestamp=t0_lsl,
-                    )
+                    outlet.push("block_start", payload, lsl_timestamp=t0_lsl)
                 except Exception:  # noqa: BLE001
                     logger.exception("block_start marker failed")
             self._events.append(
@@ -147,14 +157,15 @@ class BlockArtifactFrame(StageFrame):
             # Block-level writer record (LSL-anchored).
             if self.app.writer is not None:
                 self._block_record = self.app.writer.start_block(
-                    4, "artifact", self._duration_planned_s, t0_lsl
+                    4, "artifact", self._duration_planned_s, t0_lsl, attempt=attempt
                 )
 
         def on_cue_start(label: str, lsl_ts: float) -> None:
             if outlet is not None:
                 try:
                     outlet.artifact(label=label, kind="start",
-                                    pass_label=pass_label, lsl_timestamp=lsl_ts)
+                                    pass_label=pass_label, lsl_timestamp=lsl_ts,
+                                    attempt=attempt)
                 except Exception:  # noqa: BLE001
                     logger.exception("artifact start marker failed")
             self._events.append(
@@ -172,7 +183,8 @@ class BlockArtifactFrame(StageFrame):
             if outlet is not None:
                 try:
                     outlet.artifact(label=label, kind="end",
-                                    pass_label=pass_label, lsl_timestamp=lsl_ts)
+                                    pass_label=pass_label, lsl_timestamp=lsl_ts,
+                                    attempt=attempt)
                 except Exception:  # noqa: BLE001
                     logger.exception("artifact end marker failed")
             self._events.append(
@@ -226,17 +238,21 @@ class BlockArtifactFrame(StageFrame):
         writer = self.app.writer
         if self._block_start_lsl is None:
             self._block_start_lsl = end_lsl
+        # Worst per-stream health observed across this block window.
+        self._health_report = block_window_report(self.app, self._health_token)
         if outlet is not None:
             try:
                 outlet.block_end(
                     block_id=4, label="artifact",
                     pass_label=self.app.pass_label,
                     duration_actual_s=end_lsl - self._block_start_lsl,
+                    attempt=self._attempt,
                 )
             except Exception:  # noqa: BLE001
                 logger.exception("block_end marker failed")
         if writer is not None and self._block_record is not None:
             try:
+                self._block_record.stream_health = self._health_report or None
                 writer.end_block(
                     self._block_record, end_lsl, events=self._events,
                     status="completed",
@@ -247,5 +263,9 @@ class BlockArtifactFrame(StageFrame):
         self._cue_label.configure(text="Done.")
         self._timer_label.configure(text="00:00")
         # After block 4, advance to between_block_settle which routes to
-        # pass_switch (Pass A) or completion (Pass B).
-        self.app.show_stage("between_block_settle", after_block=4)
+        # pass_switch (Pass A) or completion (Pass B) — or to stream_recovery
+        # if a stream dropped during the block.
+        self.app.show_stage(
+            "between_block_settle", after_block=4,
+            attempt=self._attempt, health_report=self._health_report,
+        )

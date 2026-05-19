@@ -55,6 +55,11 @@ class LSLConfig(_StrictModel):
 class StreamRef(_StrictModel):
     name: str
     description: str
+    # Optional LSL stream type (e.g. "EEG", "PPG", "Markers"). When set,
+    # the live stream-health monitor matches on name substring AND type,
+    # so a per-stream dropout (Muse PPG dies while EEG keeps flowing) is
+    # detected. When None the entry is name-matched only / presence-only.
+    type: str | None = None
 
 
 class PreLaunchStreamsConfig(_StrictModel):

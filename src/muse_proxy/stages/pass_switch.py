@@ -50,8 +50,15 @@ class PassSwitchFrame(StageFrame):
             self, "", wraplength=1100, justify="center",
         )
         self._subheading.configure(anchor="center", fg=theme.TEXT_MUTED)
-        self._subheading.pack(side="top", pady=(0, 14))
+        self._subheading.pack(side="top", pady=(0, 6))
         self.register_wrappable(self._subheading, ratio=0.78, min_px=600)
+
+        # Pass A per-block stream-coverage summary.
+        self._coverage_label = tk.Label(
+            self, text="", font=theme.FONT_LABEL, fg=theme.TEXT_MUTED,
+            bg=theme.CHROME_BG, justify="center",
+        )
+        self._coverage_label.pack(side="top", pady=(0, 12))
 
         # ----- Middle: two columns (checklist + break) ------------------
         body = tk.Frame(self, bg=theme.CHROME_BG)
@@ -106,9 +113,16 @@ class PassSwitchFrame(StageFrame):
             )
         )
 
+        # Capture Pass A's per-block stream coverage before finalizing —
+        # finalize nulls the writer.
+        pass_a_blocks = (
+            list(self.app.writer.blocks) if self.app.writer is not None else []
+        )
+
         # Finalize Pass A *now* if not already done. (idempotent)
         if self.app.outlet is not None or self.app.writer is not None:
             self._finalize_pass_a()
+        self._render_coverage(pass_a_blocks)
 
         # Build checklist.
         for child in self._checklist_panel.winfo_children():
@@ -148,7 +162,31 @@ class PassSwitchFrame(StageFrame):
     def on_leave(self) -> None:
         self._cancel_break_tick()
 
+    def _render_coverage(self, blocks: list[Any]) -> None:
+        from ..stream_health import block_health_summary
+
+        lines = block_health_summary(blocks)
+        if not lines:
+            self._coverage_label.configure(text="")
+            return
+        any_bad = any("DEGRADED" in ln for ln in lines)
+        header = (
+            "Pass A stream coverage — review before continuing:"
+            if any_bad
+            else "Pass A stream coverage — all blocks OK:"
+        )
+        self._coverage_label.configure(
+            text=header + "\n" + "\n".join(f"  {ln}" for ln in lines),
+            fg=(theme.ERROR if any_bad else theme.TEXT_MUTED),
+        )
+
     def _finalize_pass_a(self) -> None:
+        if self.app.monitor is not None:
+            try:
+                self.app.monitor.stop()
+            except Exception:  # noqa: BLE001
+                logger.exception("monitor.stop failed")
+            self.app.monitor = None
         outlet = self.app.outlet
         writer = self.app.writer
         if outlet is not None:
@@ -258,6 +296,18 @@ class PassSwitchFrame(StageFrame):
             if k not in ("ra_notes", "pid", "date")
         }
         outlet.intake(**intake_marker_kv)
+
+        # Fresh stream-health monitor for Pass B's device.
+        try:
+            from ..stream_health import StreamHealthMonitor, specs_from_stream_refs
+
+            specs = specs_from_stream_refs(cfg.streams_for_device(device))
+            monitor = StreamHealthMonitor(specs)
+            monitor.start()
+            self.app.monitor = monitor
+        except Exception:  # noqa: BLE001
+            logger.exception("pass B stream-health monitor init failed")
+            self.app.monitor = None
 
 
 def _pretty(device: str) -> str:

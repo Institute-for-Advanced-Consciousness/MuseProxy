@@ -44,7 +44,9 @@ def test_instructions_space_advances_to_breathing_for_blocks_1_3(shared_app: Any
         for bid in (1, 2, 3):
             bi.on_enter(block_id=bid)
             bi._on_space()
-            assert advanced[-1] == ("block_breathing", {"block_id": bid})
+            assert advanced[-1] == (
+                "block_breathing", {"block_id": bid, "attempt": 1}
+            )
     finally:
         shared_app.show_stage = orig  # type: ignore[assignment]
 
@@ -58,7 +60,7 @@ def test_instructions_space_advances_to_artifact_for_block_4(shared_app: Any) ->
     try:
         bi.on_enter(block_id=4)
         bi._on_space()
-        assert advanced[-1] == ("block_artifact", {"block_id": 4})
+        assert advanced[-1] == ("block_artifact", {"block_id": 4, "attempt": 1})
     finally:
         shared_app.show_stage = orig  # type: ignore[assignment]
 

@@ -18,6 +18,7 @@ import pylsl
 
 from .. import theme
 from ._base import StageFrame
+from .stream_recovery import advance_to_next
 
 logger = logging.getLogger(__name__)
 
@@ -49,12 +50,16 @@ class BetweenBlockSettleFrame(StageFrame):
 
         self._after_block: int | None = None
         self._start_lsl: float | None = None
+        self._attempt: int = 1
+        self._health_report: dict[str, str] = {}
 
     def on_enter(self, **payload: Any) -> None:
         after_block = payload.get("after_block")
         if after_block is None:
             raise ValueError("between_block_settle requires after_block payload")
         self._after_block = int(after_block)
+        self._attempt = int(payload.get("attempt", 1))
+        self._health_report = dict(payload.get("health_report", {}) or {})
         self._start_lsl = pylsl.local_clock()
         outlet = self.app.outlet
         if outlet is not None:
@@ -104,10 +109,19 @@ class BetweenBlockSettleFrame(StageFrame):
     def _route(self) -> None:
         if self._after_block is None:
             return
-        if self._after_block < 4:
-            self.app.show_stage("block_instructions", block_id=self._after_block + 1)
-        elif self._after_block == 4:
-            if self.app.pass_label == "A":
-                self.app.show_stage("pass_switch")
-            else:
-                self.app.show_stage("completion")
+        # A stream that went SILENT/MISSING during the block just finished
+        # diverts to the RA-facing recovery screen before moving on.
+        degraded = any(v != "alive" for v in self._health_report.values())
+        if degraded:
+            logger.warning(
+                "block %s degraded streams: %s — routing to stream_recovery",
+                self._after_block, self._health_report,
+            )
+            self.app.show_stage(
+                "stream_recovery",
+                block_id=self._after_block,
+                attempt=self._attempt,
+                report=self._health_report,
+            )
+            return
+        advance_to_next(self.app, self._after_block)

@@ -163,11 +163,14 @@ def test_streams_for_muse2_includes_always_required() -> None:
     assert "MuseProxyMarkers" in names
 
 
-def test_streams_for_athena_includes_athena_substring() -> None:
+def test_streams_for_athena_includes_eeg_ppg_and_aim() -> None:
     cfg = load_config()
-    names = [s.name for s in cfg.streams_for_device("athena")]
-    assert "Athena" in names
-    assert "AIM" in names
+    streams = cfg.streams_for_device("athena")
+    types = {s.type for s in streams}
+    # Per-stream monitoring needs EEG and PPG tracked separately.
+    assert "EEG" in types
+    assert "PPG" in types
+    assert "AIM" in [s.name for s in streams]
 
 
 def test_streams_for_device_unknown_raises() -> None:

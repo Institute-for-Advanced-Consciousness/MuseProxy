@@ -444,6 +444,19 @@ class IntakeFrame(StageFrame):
             logger.exception("AudioScheduler init failed; continuing without audio")
             self.app.audio_scheduler = None
 
+        # 6) Live stream-health monitor for Pass A (recreated at the pass
+        #    switch). Tracks the LSL streams expected for this device.
+        try:
+            from ..stream_health import StreamHealthMonitor, specs_from_stream_refs
+
+            specs = specs_from_stream_refs(cfg.streams_for_device(pass_a_device))
+            monitor = StreamHealthMonitor(specs)
+            monitor.start()
+            self.app.monitor = monitor
+        except Exception:  # noqa: BLE001
+            logger.exception("stream-health monitor init failed; continuing without it")
+            self.app.monitor = None
+
 
 class _IntakeError(Exception):
     pass

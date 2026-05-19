@@ -56,16 +56,22 @@ class CompletionFrame(StageFrame):
         ).pack(side="bottom", pady=(0, 6))
 
     def on_enter(self, **payload: Any) -> None:
+        from ..stream_health import block_health_summary
+
         pid = self.app.participant_id or "?"
         pa = self.app.pass_a_device or "?"
         pb = self.app.pass_b_device or "?"
-        self._summary.configure(
-            text=(
-                f"  Participant:   {pid}\n"
-                f"  Pass A device: {_pretty(pa)}   →  saved\n"
-                f"  Pass B device: {_pretty(pb)}   →  ready to finalize"
-            )
+        text = (
+            f"  Participant:   {pid}\n"
+            f"  Pass A device: {_pretty(pa)}   →  saved\n"
+            f"  Pass B device: {_pretty(pb)}   →  ready to finalize"
         )
+        blocks = list(self.app.writer.blocks) if self.app.writer is not None else []
+        lines = block_health_summary(blocks)
+        if lines:
+            text += "\n\n  Pass B stream coverage:\n"
+            text += "\n".join(f"    {ln}" for ln in lines)
+        self._summary.configure(text=text)
 
     def _on_save_exit(self) -> None:
         outlet = self.app.outlet
@@ -86,6 +92,12 @@ class CompletionFrame(StageFrame):
                 writer.finalize(status="completed")
             except Exception:  # noqa: BLE001
                 logger.exception("writer.finalize(B) failed")
+        if self.app.monitor is not None:
+            try:
+                self.app.monitor.stop()
+            except Exception:  # noqa: BLE001
+                logger.exception("monitor.stop failed")
+            self.app.monitor = None
         self.app.outlet = None
         self.app.writer = None
         self.app.shutdown()

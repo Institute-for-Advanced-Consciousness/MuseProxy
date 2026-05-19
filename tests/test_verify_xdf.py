@@ -209,3 +209,145 @@ def test_audit_uses_expected_families() -> None:
     for fam in verify_xdf.EXPECTED_FAMILIES:
         assert verify_xdf._matches_family(fam, fam)
         assert verify_xdf._matches_family(f"{fam}:extra=1", fam)
+
+
+# ---------------------------------------------------------------------------
+# audit_breathing — re-run attempts
+# ---------------------------------------------------------------------------
+
+
+def test_audit_breathing_separates_attempts() -> None:
+    cfg = load_config()
+    # Block 3 attempt 1: a short run (10 cycles). Attempt 2: a full re-run.
+    m1 = [
+        (s.replace(":pass=A", ":pass=A:attempt=1"), t)
+        for s, t in _gen_breathing_markers(block_id=3, n_cycles=10, period=5.0, base_t=0.0)
+    ]
+    m2 = [
+        (s.replace(":pass=A", ":pass=A:attempt=2"), t)
+        for s, t in _gen_breathing_markers(block_id=3, n_cycles=60, period=5.0, base_t=900.0)
+    ]
+    summaries, problems = verify_xdf.audit_breathing(m1 + m2, cfg)
+    b3 = [s for s in summaries if s["block_id"] == 3]
+    assert {s["attempt"] for s in b3} == {1, 2}
+    assert next(s for s in b3 if s["attempt"] == 1)["observed_cycles"] == 10
+    assert next(s for s in b3 if s["attempt"] == 2)["observed_cycles"] == 60
+    # Attempt 1 is short — flagged. (The "attempt N" tag is omitted for
+    # attempt 1 to keep the report clean, so the message reads "block 3".)
+    assert any("block 3 inhale count 10" in p for p in problems)
+
+
+# ---------------------------------------------------------------------------
+# block_windows
+# ---------------------------------------------------------------------------
+
+
+def _block_markers(specs):
+    """specs: list of (block_id, attempt, label, t_start, t_end)."""
+    out = []
+    for bid, att, label, t0, t1 in specs:
+        suffix = f":attempt={att}" if att > 1 else ""
+        out.append(
+            (f"block_start:block={bid}:label={label}:pass=A:duration_planned_s=300{suffix}", t0)
+        )
+        out.append(
+            (f"block_end:block={bid}:label={label}:pass=A:duration_actual_s=300{suffix}", t1)
+        )
+    return out
+
+
+def test_block_windows_pairs_start_end() -> None:
+    markers = _block_markers([(1, 1, "baseline", 0.0, 300.0), (2, 1, "paced_0p1Hz", 310.0, 610.0)])
+    windows = verify_xdf.block_windows(markers)
+    assert len(windows) == 2
+    assert windows[0]["block_id"] == 1
+    assert windows[0]["t_start"] == 0.0 and windows[0]["t_end"] == 300.0
+
+
+def test_block_windows_separates_attempts() -> None:
+    markers = _block_markers(
+        [(3, 1, "paced_0p2Hz", 0.0, 300.0), (3, 2, "paced_0p2Hz", 400.0, 700.0)]
+    )
+    windows = verify_xdf.block_windows(markers)
+    assert {(w["block_id"], w["attempt"]) for w in windows} == {(3, 1), (3, 2)}
+
+
+def test_block_windows_missing_end_marker() -> None:
+    markers = [("block_start:block=1:label=baseline:pass=A:duration_planned_s=300", 0.0)]
+    windows = verify_xdf.block_windows(markers)
+    assert windows[0]["t_end"] is None
+
+
+# ---------------------------------------------------------------------------
+# audit_stream_coverage
+# ---------------------------------------------------------------------------
+
+
+def _stream(name: str, stype: str, t0: float, t1: float, srate: float = 64.0):
+    import numpy as np
+
+    n = max(2, int((t1 - t0) * srate))
+    return {
+        "name": name,
+        "type": stype,
+        "nominal_srate": srate,
+        "time_stamps": list(np.linspace(t0, t1, n)),
+    }
+
+
+def test_stream_coverage_clean_when_stream_spans_block() -> None:
+    markers = _block_markers([(1, 1, "baseline", 0.0, 300.0)])
+    streams = [_stream("Muse-EEG", "EEG", -5.0, 310.0)]
+    report, problems = verify_xdf.audit_stream_coverage(streams, markers)
+    assert problems == []
+    assert report["n_uncovered"] == 0
+
+
+def test_stream_coverage_flags_a_dropout() -> None:
+    markers = _block_markers(
+        [(1, 1, "baseline", 0.0, 300.0), (2, 1, "paced_0p1Hz", 310.0, 610.0)]
+    )
+    # Optics stream dies at t=400 — covers block 1 but not block 2.
+    streams = [_stream("Muse-OPTICS", "PPG", -5.0, 400.0)]
+    report, problems = verify_xdf.audit_stream_coverage(streams, markers)
+    assert report["n_uncovered"] == 1
+    assert any("before the block finished" in p and p.startswith("FAIL") for p in problems)
+
+
+def test_stream_coverage_flags_late_start() -> None:
+    markers = _block_markers([(1, 1, "baseline", 0.0, 300.0)])
+    streams = [_stream("Muse-EEG", "EEG", 50.0, 320.0)]
+    _, problems = verify_xdf.audit_stream_coverage(streams, markers)
+    assert any("into the block" in p for p in problems)
+
+
+def test_stream_coverage_empty_stream_flagged() -> None:
+    markers = _block_markers([(1, 1, "baseline", 0.0, 300.0)])
+    streams = [{"name": "Dead", "type": "EEG", "nominal_srate": 64.0, "time_stamps": []}]
+    _, problems = verify_xdf.audit_stream_coverage(streams, markers)
+    assert any("no samples" in p for p in problems)
+
+
+def test_stream_coverage_missing_block_end_flagged() -> None:
+    markers = [("block_start:block=1:label=baseline:pass=A:duration_planned_s=300", 0.0)]
+    streams = [_stream("Muse-EEG", "EEG", 0.0, 300.0)]
+    _, problems = verify_xdf.audit_stream_coverage(streams, markers)
+    assert any("no block_end" in p for p in problems)
+
+
+# ---------------------------------------------------------------------------
+# load_data_streams
+# ---------------------------------------------------------------------------
+
+
+def test_load_data_streams_filters_slow_and_marker_streams() -> None:
+    raw = [
+        {"info": {"name": ["Muse-EEG"], "type": ["EEG"], "nominal_srate": ["256"]},
+         "time_stamps": [1.0, 2.0]},
+        {"info": {"name": ["MuseProxyMarkers"], "type": ["Markers"], "nominal_srate": ["0"]},
+         "time_stamps": [1.0]},
+        {"info": {"name": ["Muse-BATTERY"], "type": ["Battery"], "nominal_srate": ["1"]},
+         "time_stamps": [1.0]},
+    ]
+    out = verify_xdf.load_data_streams(raw)
+    assert [d["name"] for d in out] == ["Muse-EEG"]

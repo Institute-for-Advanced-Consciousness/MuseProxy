@@ -127,10 +127,13 @@ def test_intake_open_services_creates_outlet_writer_and_intake_json(
         assert (pass_dir / "PARTIAL_session.json").exists()
         assert (pass_dir / "markers.csv").exists()
     finally:
-        # Clean up the outlet so subsequent tests can rebuild.
+        # Clean up the outlet + monitor so subsequent tests can rebuild.
         if shared_app.outlet is not None:
             shared_app.outlet.close()
             shared_app.outlet = None
+        if shared_app.monitor is not None:
+            shared_app.monitor.stop()
+            shared_app.monitor = None
         shared_app.writer = None
         shared_app.audio_scheduler = None
 

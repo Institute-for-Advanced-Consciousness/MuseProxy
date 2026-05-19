@@ -217,16 +217,19 @@ class MuseProxyMarkerOutlet:
         label: str,
         pass_label: str,
         duration_planned_s: float,
+        attempt: int = 1,
     ) -> float:
-        return self.push(
-            "block_start",
-            {
-                "block": block_id,
-                "label": label,
-                "pass": pass_label,
-                "duration_planned_s": duration_planned_s,
-            },
-        )
+        payload: dict[str, Any] = {
+            "block": block_id,
+            "label": label,
+            "pass": pass_label,
+            "duration_planned_s": duration_planned_s,
+        }
+        # ``attempt`` is omitted for the first run so attempt-1 markers are
+        # byte-identical to pre-salvage recordings. Re-runs carry attempt=N.
+        if attempt > 1:
+            payload["attempt"] = attempt
+        return self.push("block_start", payload)
 
     def block_end(
         self,
@@ -235,16 +238,17 @@ class MuseProxyMarkerOutlet:
         label: str,
         pass_label: str,
         duration_actual_s: float,
+        attempt: int = 1,
     ) -> float:
-        return self.push(
-            "block_end",
-            {
-                "block": block_id,
-                "label": label,
-                "pass": pass_label,
-                "duration_actual_s": duration_actual_s,
-            },
-        )
+        payload: dict[str, Any] = {
+            "block": block_id,
+            "label": label,
+            "pass": pass_label,
+            "duration_actual_s": duration_actual_s,
+        }
+        if attempt > 1:
+            payload["attempt"] = attempt
+        return self.push("block_end", payload)
 
     def between_block_settle_start(self, *, after_block: int) -> float:
         return self.push("between_block_settle:start", {"after_block": after_block})
@@ -290,13 +294,15 @@ class MuseProxyMarkerOutlet:
         cycle: int,
         pass_label: str,
         lsl_timestamp: float,
+        attempt: int = 1,
     ) -> float:
         if kind not in ("inhale", "exhale"):
             raise ValueError(f"breath kind must be inhale|exhale; got {kind!r}")
+        payload: dict[str, Any] = {"block": block_id, "cycle": cycle, "pass": pass_label}
+        if attempt > 1:
+            payload["attempt"] = attempt
         return self.push(
-            f"breath:{kind}",
-            {"block": block_id, "cycle": cycle, "pass": pass_label},
-            lsl_timestamp=lsl_timestamp,
+            f"breath:{kind}", payload, lsl_timestamp=lsl_timestamp
         )
 
     def artifact(
@@ -307,13 +313,15 @@ class MuseProxyMarkerOutlet:
         pass_label: str,
         lsl_timestamp: float,
         block_id: int = 4,
+        attempt: int = 1,
     ) -> float:
         if kind not in ("start", "end"):
             raise ValueError(f"artifact kind must be start|end; got {kind!r}")
+        payload: dict[str, Any] = {"block": block_id, "pass": pass_label}
+        if attempt > 1:
+            payload["attempt"] = attempt
         return self.push(
-            f"artifact:{label}:{kind}",
-            {"block": block_id, "pass": pass_label},
-            lsl_timestamp=lsl_timestamp,
+            f"artifact:{label}:{kind}", payload, lsl_timestamp=lsl_timestamp
         )
 
     def tts(self, *, clip: str, kind: str, lsl_timestamp: float | None = None) -> float:
