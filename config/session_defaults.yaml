@@ -44,20 +44,25 @@ pre_launch_streams:
     - name: "MuseProxyMarkers"
       type: "Markers"
       description: "This app's marker stream"
+  # Names match the direct-BLE bridge (`python -m muse_proxy.bridge stream`).
+  # They are deliberately device-distinct: "Muse2-EEG" never matches an Athena
+  # stream ("Muse-EEG (<id>)") and vice versa, and neither matches a legacy
+  # muselsl outlet (plain "Muse"), so a leftover stream from the other device
+  # or the old pipeline cannot satisfy the checklist.
   muse_2:
-    - name: "Muse"
+    - name: "Muse2-EEG"
       type: "EEG"
-      description: "Muse 2 — EEG (TP9 / AF7 / AF8 / TP10)"
-    - name: "Muse"
+      description: "Muse 2 — EEG (TP9 / AF7 / AF8 / TP10) via MuseProxy bridge"
+    - name: "Muse2-PPG"
       type: "PPG"
-      description: "Muse 2 — PPG (optical pulse)"
+      description: "Muse 2 — PPG (ambient / IR / red) via MuseProxy bridge"
   muse_athena:
-    - name: "Muse"
+    - name: "Muse-EEG"
       type: "EEG"
-      description: "Muse Athena — EEG (TP9 / AF7 / AF8 / TP10)"
-    - name: "Muse"
+      description: "Muse Athena — EEG via MuseProxy bridge"
+    - name: "Muse-OPTICS"
       type: "PPG"
-      description: "Muse Athena — PPG / optics"
+      description: "Muse Athena — optics (PPG / fNIRS) via MuseProxy bridge"
 
 # Additional manual confirmations the RA ticks on the pre-launch screen
 pre_launch_manual_confirmations:

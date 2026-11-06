@@ -159,8 +159,22 @@ def test_streams_for_muse2_includes_always_required() -> None:
     streams = cfg.streams_for_device("muse2")
     names = [s.name for s in streams]
     assert "AIM" in names
-    assert "Muse" in names
+    assert "Muse2-EEG" in names and "Muse2-PPG" in names
     assert "MuseProxyMarkers" in names
+
+
+def test_device_stream_names_cannot_cross_match() -> None:
+    """A Muse 2 stream must never satisfy an Athena spec (and vice versa), and
+    neither may a legacy muselsl outlet named plain "Muse"."""
+    cfg = load_config()
+    m2 = [s.name.lower() for s in cfg.pre_launch_streams.muse_2]
+    ath = [s.name.lower() for s in cfg.pre_launch_streams.muse_athena]
+    m2_streams = ["muse2-eeg (1a2b)", "muse2-ppg (1a2b)"]
+    ath_streams = ["muse-eeg (0dbb)", "muse-optics (0dbb)"]
+    for needle in ath:
+        assert not any(needle in s for s in m2_streams + ["muse"])
+    for needle in m2:
+        assert not any(needle in s for s in ath_streams + ["muse"])
 
 
 def test_streams_for_athena_includes_eeg_ppg_and_aim() -> None:

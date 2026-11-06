@@ -48,7 +48,18 @@ The trade-off for running the same person twice is order effects (e.g., calmer i
 
 - **No real-time signal display.** Lab Recorder is the recorder; this app is the experimental scaffolding and marker source.
 - **No analysis.** `scripts/verify_xdf.py` audits that markers landed correctly; everything else is post-hoc.
-- **No EEG processing libraries.** The signal path uses only `numpy` + `sounddevice` + `pylsl`.
+- **No EEG processing libraries.** The signal path uses only `numpy` + `sounddevice` + `pylsl`, plus `bleak` for the headset bridge.
+
+## Headset bridge
+
+`python -m muse_proxy.bridge` (`src/muse_proxy/bridge/`) is a companion process
+that connects directly to one Muse 2 or Muse S Athena over BLE and publishes
+LSL streams; it replaces muselsl and the OpenMuse-.txt relay used in the 2026
+pilot. Dropped packets are NaN (never zero), all timestamps derive from device
+time, and every raw notification is logged. Protocol notes, the 2026 failure
+analysis and the hardware bring-up checklist are in `docs/BLE_BRIDGE.md`. The
+Athena decoder (`athena_decode.py`) and synth (`athena_synth.py`) are vendored
+verbatim from the IACS relay — don't restyle them.
 
 ## Operational defaults
 

@@ -320,3 +320,27 @@ def test_recovery_rerun_attempt_keeps_climbing(shared_app: Any) -> None:
         shared_app.show_stage = orig
         sr.on_leave()
         shared_app.monitor = None
+
+
+def test_override_marker_names_down_streams() -> None:
+    from muse_proxy.stages.block_instructions import record_stream_override
+
+    class _Outlet:
+        def __init__(self):
+            self.pushed = []
+
+        def push(self, event, payload=None, **_kw):
+            self.pushed.append((event, payload))
+            return 0.0
+
+    class _App:
+        pass
+
+    app = _App()
+    app.outlet = _Outlet()
+    app.pass_label = "B"
+    app.monitor = _FakeMonitor({"Muse2-EEG|EEG": ALIVE, "Muse2-PPG|PPG": MISSING})
+    record_stream_override(app, "stream_override", 3, 2)
+    event, payload = app.outlet.pushed[-1]
+    assert event == "stream_override"
+    assert payload == {"block": 3, "attempt": 2, "pass": "B", "down": "Muse2-PPG|PPG"}

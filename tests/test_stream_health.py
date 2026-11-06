@@ -86,16 +86,24 @@ def test_absent_stream_is_missing() -> None:
 
 
 def test_silent_only_after_threshold_polls() -> None:
-    mon = StreamHealthMonitor(
-        [EEG], FakePoller([{"eeg": _silent()}]), silent_polls=3
-    )
-    # Polls 1 and 2: still within grace -> ALIVE.
+    script = [{"eeg": _alive()}] + [{"eeg": _silent()}] * 3
+    mon = StreamHealthMonitor([EEG], FakePoller(script), silent_polls=3)
+    mon.poll_once()  # has delivered data once
+    # Silent polls 1 and 2: still within grace -> ALIVE.
     mon.poll_once()
     mon.poll_once()
     assert mon.snapshot()[0].status is StreamStatus.ALIVE
     # Poll 3: crosses the threshold -> SILENT.
     mon.poll_once()
     assert mon.snapshot()[0].status is StreamStatus.SILENT
+
+
+def test_visible_but_never_sampled_stream_is_silent_immediately() -> None:
+    """An outlet that exists but has never delivered data gets no grace."""
+    mon = StreamHealthMonitor([EEG], FakePoller([{"eeg": _silent()}]), silent_polls=3)
+    mon.poll_once()
+    assert mon.snapshot()[0].status is StreamStatus.SILENT
+    assert not mon.all_alive()
 
 
 def test_samples_reset_the_silent_counter() -> None:

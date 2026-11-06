@@ -14,6 +14,7 @@ dependencies = [
   "numpy>=1.26,<3",
   "pydantic>=2.5,<3",
   "PyYAML>=6.0,<7",
+  "bleak>=0.22,<2",
 ]
 
 [build-system]
@@ -49,6 +50,9 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["B011"]  # asserts are fine in tests
+# Vendored from OpenMuse / the IACS relay — kept byte-identical to upstream.
+"src/muse_proxy/bridge/athena_decode.py" = ["E", "F", "W", "I", "B", "UP"]
+"src/muse_proxy/bridge/athena_synth.py" = ["E", "F", "W", "I", "B", "UP"]
 
 # -----------------------------------------------------------------------------
 # Pytest

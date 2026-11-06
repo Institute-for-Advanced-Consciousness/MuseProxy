@@ -217,6 +217,7 @@ class BlockInstructionsFrame(StageFrame):
             logger.warning(
                 "RA override: starting block %s with a stream down", self._block_id
             )
+            record_stream_override(self.app, "stream_override", self._block_id, self._attempt)
         for seq in ("<space>", "<Control-Return>"):
             try:
                 self.unbind_all(seq)
@@ -225,3 +226,32 @@ class BlockInstructionsFrame(StageFrame):
         self._cancel_stream_poll()
         target = "block_artifact" if self._block_id == 4 else "block_breathing"
         self.app.show_stage(target, block_id=self._block_id, attempt=self._attempt)
+
+
+def _marker_safe(text: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in "-_.|" else "_" for ch in text)
+
+
+def record_stream_override(app: object, event: str, block_id: int, attempt: int) -> None:
+    """Put an RA decision to proceed with a stream down into the marker stream
+    (and therefore the CSV mirror and the XDF), naming the streams that were down.
+    Never raises: losing this marker must not block the session."""
+    outlet = getattr(app, "outlet", None)
+    if outlet is None:
+        return
+    down = ""
+    monitor = getattr(app, "monitor", None)
+    try:
+        if monitor is not None:
+            down = ",".join(
+                _marker_safe(h.spec.key) for h in monitor.snapshot()
+                if h.status is not StreamStatus.ALIVE
+            )
+        outlet.push(event, {
+            "block": block_id,
+            "attempt": attempt,
+            "pass": getattr(app, "pass_label", "?"),
+            "down": down or "none",
+        })
+    except Exception:  # noqa: BLE001
+        logger.exception("could not record %s marker", event)

@@ -21,22 +21,28 @@ The installer fetches `uv`, runs `uv sync`, renders all audio assets via `edge-t
 ### Each visit
 
 1. Plug headphones into the laptop. Verify the participant can hear comfortably.
-2. Open **Lab Recorder**. Confirm it has discovered:
-   - The Muse stream(s) for the device the participant is wearing first
+2. Start the **headset bridge** for the device the participant is wearing first
+   (`launch_bridge.bat` to scan, then e.g.
+   `launch_bridge.bat stream --model muse2 --address <address>`). Leave its window
+   open; the status line should say `streaming` with low `% lost`. See
+   [`docs/BLE_BRIDGE.md`](docs/BLE_BRIDGE.md).
+3. Open **Lab Recorder**. Confirm it has discovered:
+   - `Muse2-EEG` + `Muse2-PPG` (Muse 2) or `Muse-EEG` + `Muse-OPTICS` (Athena)
    - The CGX AIM-II stream
    - `MuseProxyMarkers` (this app — note: it appears only *after* you launch the app)
-3. Launch **this app** (`launch.bat`). The GUI opens at the Intake screen.
-4. Fill in intake. Pick Pass A device (the headset the participant is currently wearing).
-5. Walk through pre-launch checklist → volume check → settle.
-6. **Start a Lab Recorder recording before clicking Start** — name the file something like `P001_passA_muse2.xdf`.
-7. Hand the laptop to the participant. They walk Blocks 1–4 by reading instructions and pressing SPACE.
-8. At the **Pass Switch** screen, follow the on-screen RA checklist:
+4. Launch **this app** (`launch.bat`). The GUI opens at the Intake screen.
+5. Fill in intake. Pick Pass A device (the headset the participant is currently wearing).
+6. Walk through pre-launch checklist → volume check → settle.
+7. **Start a Lab Recorder recording before clicking Start** — name the file something like `P001_passA_muse2.xdf`.
+8. Hand the laptop to the participant. They walk Blocks 1–4 by reading instructions and pressing SPACE.
+9. At the **Pass Switch** screen, follow the on-screen RA checklist:
    - Stop the current Lab Recorder recording
-   - Swap headset; verify good signal on the new one
+   - Ctrl+C the Pass A bridge, swap headset, start the bridge for the new
+     device; verify good signal on the new one
    - **Start a new Lab Recorder recording** with a Pass B filename (e.g., `P001_passB_athena.xdf`)
    - Tick the manual confirmation boxes in-app
-9. Pass B walks the same Blocks 1–4 with the new device.
-10. Completion → Save & Exit.
+10. Pass B walks the same Blocks 1–4 with the new device.
+11. Completion → Save & Exit.
 
 ### Aborting
 

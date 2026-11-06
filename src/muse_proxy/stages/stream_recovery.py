@@ -271,4 +271,7 @@ class StreamRecoveryFrame(StageFrame):
         self.on_leave()
         logger.info("RA continuing past block %s despite stream dropout",
                     self._block_id)
+        from .block_instructions import record_stream_override
+
+        record_stream_override(self.app, "stream_continue", self._block_id, self._attempt)
         advance_to_next(self.app, self._block_id)

@@ -117,6 +117,13 @@ class StreamHealth:
     last_alive_lsl: float | None = None
     new_samples_last_poll: int = 0
     silent_polls: int = 0
+    # A continuous stream must deliver at least one sample before it can be
+    # ALIVE: a visible-but-empty outlet (the 2026 P030 Muse failure mode)
+    # gets no grace period.
+    samples_total: int = 0
+    # More than one visible stream matched this spec (e.g. a stale muselsl
+    # outlet next to the bridge). Logged; the first match is still used.
+    ambiguous: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -219,6 +226,7 @@ class LslPoller:
 
 def _match_info(spec: StreamSpec, infos: Iterable[pylsl.StreamInfo]) -> pylsl.StreamInfo | None:
     needle = spec.name.lower()
+    matches: list[pylsl.StreamInfo] = []
     for info in infos:
         try:
             if needle not in info.name().lower():
@@ -227,8 +235,14 @@ def _match_info(spec: StreamSpec, infos: Iterable[pylsl.StreamInfo]) -> pylsl.St
                 continue
         except Exception:  # noqa: BLE001
             continue
-        return info
-    return None
+        matches.append(info)
+    if len(matches) > 1:
+        try:
+            names = ", ".join(f"{m.name()} [{m.source_id()}@{m.hostname()}]" for m in matches)
+        except Exception:  # noqa: BLE001
+            names = str(len(matches))
+        logger.warning("stream spec %r matches %d streams: %s", spec.key, len(matches), names)
+    return matches[0] if matches else None
 
 
 # ---------------------------------------------------------------------------
@@ -397,7 +411,10 @@ class StreamHealthMonitor:
             return StreamStatus.ALIVE
         if res.new_samples > 0:
             health.silent_polls = 0
+            health.samples_total += res.new_samples
             return StreamStatus.ALIVE
+        if health.samples_total == 0:
+            return StreamStatus.SILENT
         health.silent_polls += 1
         if health.silent_polls >= self._silent_polls:
             return StreamStatus.SILENT

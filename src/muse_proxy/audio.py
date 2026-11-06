@@ -259,6 +259,9 @@ class AudioScheduler:
         cursor = [0]  # samples written so far
         cue_idx = [0]  # next cue to consider
         t0_holder: dict[str, float] = {}
+        # True once the buffer's tail has been written — i.e. playback ran to
+        # completion rather than being stopped early (abort / on_leave).
+        reached_tail = [False]
 
         sr = self.sample_rate
 
@@ -290,6 +293,7 @@ class AudioScheduler:
                 # Tail: pad with silence, then trigger finish after this callback.
                 outdata[: len(chunk), 0] = chunk
                 outdata[len(chunk):, 0] = 0.0
+                reached_tail[0] = True
                 raise sd.CallbackStop
             else:
                 outdata[:, 0] = chunk
@@ -320,9 +324,17 @@ class AudioScheduler:
             cursor[0] = end
 
         def finished():
-            # Fire any cue callbacks that didn't get hit (e.g. stream
-            # stopped or final callback truncated).
+            # Natural end: cues in the final (truncated) callback were played
+            # but not yet fired — fire them now with their DAC-anchored times.
+            # Early stop: the remaining cues never reached the DAC, so writing
+            # their markers would put events that never happened into the XDF.
             t0_lsl = t0_holder.get("t0_lsl")
+            if t0_lsl is not None and not reached_tail[0] and cue_idx[0] < len(cues):
+                logger.warning(
+                    "playback stopped early; %d cue(s) never played and were not marked",
+                    len(cues) - cue_idx[0],
+                )
+                cue_idx[0] = len(cues)
             if t0_lsl is not None:
                 while cue_idx[0] < len(cues):
                     onset_sample, cb = cues[cue_idx[0]]

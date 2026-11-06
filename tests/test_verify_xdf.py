@@ -351,3 +351,84 @@ def test_load_data_streams_filters_slow_and_marker_streams() -> None:
     ]
     out = verify_xdf.load_data_streams(raw)
     assert [d["name"] for d in out] == ["Muse-EEG"]
+
+
+# ---------------------------------------------------------------------------
+# Required headset streams + signal integrity (added with the BLE bridge)
+# ---------------------------------------------------------------------------
+
+
+def _xdf_stream(name: str, stype: str, data, ts, srate: float = 256.0) -> dict:
+    import numpy as np
+
+    return {
+        "info": {"name": [name], "type": [stype], "nominal_srate": [str(srate)]},
+        "time_series": np.asarray(data, dtype=float),
+        "time_stamps": np.asarray(ts, dtype=float),
+    }
+
+
+def test_pass_device_from_pass_start() -> None:
+    markers = [("pass_start:pass=B:device=athena:source_id=x", 1.0)]
+    assert verify_xdf.pass_device(markers) == "athena"
+
+
+def test_pass_device_fallback_to_device_marker() -> None:
+    markers = [("pass_a_device:muse2", 0.5), ("pass_b_device:athena", 0.6),
+               ("block_start:block=1:pass=A", 1.0)]
+    assert verify_xdf.pass_device(markers) == "muse2"
+
+
+def test_required_streams_missing_athena_is_fail() -> None:
+    """The 2026 failure: Athena pass XDF with CGX + markers only."""
+    import numpy as np
+
+    cfg = load_config()
+    streams = [
+        _xdf_stream("CGX AIM Phys. Mon. AIM-0106", "EEG", np.ones((10, 2)), np.arange(10)),
+        _xdf_stream("MuseProxyMarkers", "Markers", np.zeros((1, 1)), [0.0], 0),
+    ]
+    _rows, problems = verify_xdf.audit_required_streams(streams, cfg, "athena")
+    fails = [p for p in problems if p.startswith("FAIL")]
+    assert any("Muse-EEG" in p for p in fails) and any("Muse-OPTICS" in p for p in fails)
+
+
+def test_required_streams_empty_stream_is_fail() -> None:
+    import numpy as np
+
+    cfg = load_config()
+    streams = [
+        _xdf_stream("CGX AIM Phys. Mon. AIM-0106", "EEG", np.ones((10, 2)), np.arange(10)),
+        _xdf_stream("MuseProxyMarkers", "Markers", np.zeros((1, 1)), [0.0], 0),
+        _xdf_stream("Muse2-EEG (1A2B)", "EEG", np.empty((0, 4)), []),
+        _xdf_stream("Muse2-PPG (1A2B)", "PPG", np.ones((5, 3)), np.arange(5), 64),
+    ]
+    _rows, problems = verify_xdf.audit_required_streams(streams, cfg, "muse2")
+    assert problems == ["FAIL: expected stream 'Muse2-EEG' (EEG) has no samples"]
+
+
+def test_signal_integrity_flags_zero_runs_backwards_ts_and_nan() -> None:
+    import numpy as np
+
+    n = 1200
+    eeg = np.random.default_rng(0).normal(size=(n, 2))
+    eeg[100:112, 0] = 0.0  # muselsl-style zero-filled packets: 12 samples each
+    eeg[300:312, 0] = 0.0
+    ts = np.arange(n) / 256.0
+    ts[500] = ts[498]      # one backwards step
+    ppg = np.ones((n, 3))
+    ppg[::5, 1] = np.nan    # bridge-style NaN marking
+    streams = [
+        {"name": "Muse", "type": "EEG", "time_stamps": ts, "time_series": eeg},
+        {"name": "Muse2-PPG", "type": "PPG", "time_stamps": np.arange(n) / 64,
+         "time_series": ppg},
+        {"name": "CGX", "type": "EEG", "time_stamps": np.arange(n),
+         "time_series": np.c_[np.ones(n), np.zeros(n)]},  # unused channel: flat
+    ]
+    rows, problems = verify_xdf.audit_signal_integrity(streams, zero_frac_warn=0.01)
+    joined = "\n".join(problems)
+    assert "'Muse' (EEG) — up to 2.0%" in joined
+    assert "1 timestamps go backwards" in joined
+    assert "20.0% of samples contain NaN" in joined
+    assert rows[2]["flat_channels"] == [1]
+    assert "CGX" not in joined
