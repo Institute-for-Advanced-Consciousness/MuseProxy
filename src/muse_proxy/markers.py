@@ -281,7 +281,7 @@ class MuseProxyMarkerOutlet:
         return self.push("intake", kv)
 
     def device_marker(self, *, pass_label: str, device: str) -> float:
-        # e.g. pass_a_device:muse2  or  pass_b_device:athena
+        # e.g. pass_a_device:muse-2  or  pass_b_device:muse-athena
         return self.push(
             f"pass_{pass_label.lower()}_device:{device}"
         )

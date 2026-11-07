@@ -226,7 +226,7 @@ def audit_required_streams(
     streams: list[dict[str, Any]], cfg: Any, device: str | None
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Every stream the config expects for this pass's device must be present
-    AND contain samples. (The 2026 Athena XDFs had no Athena streams at all and
+    AND contain samples. (The 2026 Muse-Athena XDFs had no Muse-Athena streams at all and
     the old audit never noticed.)"""
     problems: list[str] = []
     rows: list[dict[str, Any]] = []

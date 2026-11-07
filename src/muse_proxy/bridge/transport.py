@@ -3,7 +3,7 @@
 ``DeviceBridge`` needs only ``scan(timeout)`` and ``client(device, timeout=,
 disconnected_callback=)`` (an async context manager exposing ``is_connected``,
 ``start_notify`` and ``write_gatt_char``). ``FakeTransport`` serves synthetic
-Muse 2 / Athena devices through that exact surface, so the decode → LSL path,
+Muse-2 / Muse-Athena devices through that exact surface, so the decode → LSL path,
 the NaN gap handling and the reconnect supervisor are all testable with no
 hardware — and ``--fake`` gives the operator a dry run of the whole chain.
 """
@@ -25,7 +25,7 @@ from .athena_synth import SyntheticAthena
 class Discovered:
     name: str
     address: str
-    model: str            # "muse2" | "athena" | "unknown"
+    model: str            # "muse-2" | "muse-athena" | "unknown"
     device_id: str
     rssi: int | None = None
     ble_device: Any = None
@@ -34,18 +34,18 @@ class Discovered:
 def classify(name: str | None) -> str:
     """Advertised-name → model.
 
-    ``Muse-XXXX`` is the Muse 2 (and the 2016 Muse, same protocol, no PPG);
-    ``MuseS-XXXX`` is the Muse S family — Athena is assumed (Gen 1/2 Muse S
-    also advertise ``MuseS`` but speak the Muse 2 protocol; select
-    ``--model muse2`` explicitly for those).
+    ``Muse-XXXX`` is the Muse-2 (and the 2016 Muse, same protocol, no PPG);
+    ``MuseS-XXXX`` is the Muse S family — Muse-Athena is assumed (Gen 1/2 Muse S
+    also advertise ``MuseS`` but speak the Muse-2 protocol; select
+    ``--model muse-2`` explicitly for those).
     """
     if not name:
         return "unknown"
     n = name.strip().lower()
     if n.startswith("muses"):
-        return "athena"
+        return "muse-athena"
     if n.startswith("muse"):
-        return "muse2"
+        return "muse-2"
     return "unknown"
 
 
@@ -112,7 +112,7 @@ class FakeClient:
         self._t_conn = 0.0
         self._task: asyncio.Task | None = None
         self.commands: list[str] = []
-        if model == "muse2":
+        if model == "muse-2":
             self._synth: Any = muse2.SyntheticMuse2(drop_prob=drop_prob)
             self._start_tok = "d"
         else:
@@ -140,7 +140,7 @@ class FakeClient:
     async def write_gatt_char(self, uuid: str, data: bytes, response: bool = False) -> None:
         tok = _decode_command(bytes(data))
         self.commands.append(tok)
-        if tok == "p21" and self.model == "athena":
+        if tok == "p21" and self.model == "muse-athena":
             self._prime = True
         elif tok.startswith("p") and tok[1:].isdigit():
             self._prime = False
@@ -187,7 +187,7 @@ class FakeTransport:
     def __init__(self, model: str, scenarios: dict[int, dict] | None = None,
                  drop_prob: float = 0.0, device_id: str = "FAKE") -> None:
         self.model = model
-        name = f"Muse-{device_id}" if model == "muse2" else f"MuseS-{device_id}"
+        name = f"Muse-{device_id}" if model == "muse-2" else f"MuseS-{device_id}"
         self.device = Discovered(name=name, address="00:55:DA:00:FA:CE", model=model,
                                  device_id=device_id, rssi=-50)
         self._scenarios = scenarios or {}
@@ -208,4 +208,4 @@ class FakeTransport:
 
 
 # Re-exported for the CLI.
-CONTROL_UUIDS = {"muse2": muse2.CONTROL_UUID, "athena": athena.CONTROL_UUID}
+CONTROL_UUIDS = {"muse-2": muse2.CONTROL_UUID, "muse-athena": athena.CONTROL_UUID}

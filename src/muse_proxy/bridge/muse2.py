@@ -1,8 +1,8 @@
-"""Muse 2 (2018/2019, "Muse-XXXX") direct BLE protocol, decode and publisher.
+"""Muse-2 (2018/2019, "Muse-XXXX") direct BLE protocol, decode and publisher.
 
 Why this exists
 ---------------
-The 2026 study recorded the Muse 2 through muselsl, which (a) zero-fills any
+The 2026 study recorded the Muse-2 through muselsl, which (a) zero-fills any
 channel whose notification didn't arrive before the AF7 (EEG) / RED (PPG)
 notification that triggers a push, and (b) timestamps ACC/GYRO by arrival,
 producing backwards time. This module replaces it.
@@ -309,12 +309,12 @@ class _Stream:
 
 
 class Muse2Publisher:
-    """Decode → assemble → timestamp → LSL for one Muse 2.
+    """Decode → assemble → timestamp → LSL for one Muse-2.
 
     Not thread-safe: called from the bridge's single decode thread.
     """
 
-    MODEL = "muse2"
+    MODEL = "muse-2"
 
     def __init__(
         self,
@@ -331,7 +331,7 @@ class Muse2Publisher:
         self.include_imu = include_imu
         base_desc = {
             "manufacturer": "Interaxon",
-            "model": "Muse 2",
+            "model": "Muse-2",
             "device_id": device_id,
             "bridge": "muse_proxy.bridge",
             "bridge_version": BRIDGE_VERSION,
@@ -367,33 +367,33 @@ class Muse2Publisher:
         self.streams["EEG"] = _Stream(
             "EEG", EEG_FS, EEG_N,
             SequenceAssembler(len(self.eeg_labels), EEG_N),
-            mk(name=f"Muse2-EEG ({did})", stype="EEG", labels=self.eeg_labels,
-               units="microvolts", fs=EEG_FS, source_id=f"muse2_{did}_eeg", desc=self._desc),
+            mk(name=f"Muse-2-EEG ({did})", stype="EEG", labels=self.eeg_labels,
+               units="microvolts", fs=EEG_FS, source_id=f"muse-2_{did}_eeg", desc=self._desc),
         )
         self.streams["PPG"] = _Stream(
             "PPG", PPG_FS, PPG_N,
             SequenceAssembler(len(self.ppg_labels), PPG_N, max_wait=3),
-            mk(name=f"Muse2-PPG ({did})", stype="PPG", labels=self.ppg_labels,
-               units="counts", fs=PPG_FS, source_id=f"muse2_{did}_ppg", desc=self._desc),
+            mk(name=f"Muse-2-PPG ({did})", stype="PPG", labels=self.ppg_labels,
+               units="counts", fs=PPG_FS, source_id=f"muse-2_{did}_ppg", desc=self._desc),
         )
         if self.include_imu:
             self.streams["ACC"] = _Stream(
                 "ACC", IMU_FS, IMU_N, SequenceAssembler(1, IMU_N, (3,), max_wait=2),
-                mk(name=f"Muse2-ACC ({did})", stype="ACC", labels=["ACC_X", "ACC_Y", "ACC_Z"],
-                   units="g", fs=IMU_FS, source_id=f"muse2_{did}_acc", desc=self._desc),
+                mk(name=f"Muse-2-ACC ({did})", stype="ACC", labels=["ACC_X", "ACC_Y", "ACC_Z"],
+                   units="g", fs=IMU_FS, source_id=f"muse-2_{did}_acc", desc=self._desc),
             )
             self.streams["GYRO"] = _Stream(
                 "GYRO", IMU_FS, IMU_N, SequenceAssembler(1, IMU_N, (3,), max_wait=2),
-                mk(name=f"Muse2-GYRO ({did})", stype="GYRO",
+                mk(name=f"Muse-2-GYRO ({did})", stype="GYRO",
                    labels=["GYRO_X", "GYRO_Y", "GYRO_Z"], units="dps", fs=IMU_FS,
-                   source_id=f"muse2_{did}_gyro", desc=self._desc),
+                   source_id=f"muse-2_{did}_gyro", desc=self._desc),
             )
         self.streams["TELEMETRY"] = _Stream(
             "TELEMETRY", 0.0, 1, None,
-            mk(name=f"Muse2-TELEMETRY ({did})", stype="Telemetry",
+            mk(name=f"Muse-2-TELEMETRY ({did})", stype="Telemetry",
                labels=["BATTERY_PERCENT", "FUEL_GAUGE_MV", "ADC_MV", "TEMPERATURE_RAW"],
                units=["percent", "mV", "mV", "raw"], fs=0.0,
-               source_id=f"muse2_{did}_telemetry", desc=self._desc),
+               source_id=f"muse-2_{did}_telemetry", desc=self._desc),
         )
 
     # --- ingest ---------------------------------------------------------------
@@ -453,7 +453,7 @@ class Muse2Publisher:
     def new_segment(self) -> None:
         """Call on every (re)connect: flush pending frames, restart timelines.
 
-        The Muse 2 may or may not restart its packet counter after a reconnect,
+        The Muse-2 may or may not restart its packet counter after a reconnect,
         so device time is continued from the last emitted index plus one
         rather than trusting the new counter's absolute value; the clock is
         reset so the regression never straddles the discontinuity.
@@ -499,7 +499,7 @@ class Muse2Publisher:
 
 # --- synthetic device -----------------------------------------------------------------
 class SyntheticMuse2:
-    """Real-time-paced fake Muse 2 notifications (alpha EEG, pulsatile PPG).
+    """Real-time-paced fake Muse-2 notifications (alpha EEG, pulsatile PPG).
 
     ``drop_prob`` drops individual channel notifications at random so the NaN
     path is exercised; ``due_packets(elapsed)`` returns ``(uuid, raw)`` due by

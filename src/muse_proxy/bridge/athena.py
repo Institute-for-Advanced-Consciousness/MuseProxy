@@ -1,4 +1,4 @@
-"""Muse S Athena ("MuseS-XXXX") direct BLE protocol and publisher.
+"""Muse-Athena ("MuseS-XXXX") direct BLE protocol and publisher.
 
 Ported from the IACS relay (Institute-for-Advanced-Consciousness/
 Muse-S-Athena-RealTime-Visualization, ``muse_relay/bridge``): same GATT layout,
@@ -7,7 +7,7 @@ double ``dc001``) and the same OpenMuse-derived decoder (vendored in
 ``athena_decode.py``). Differences from the relay, for this study:
 
 * publishes with ``pylsl`` (the rest of MuseProxy's stack) instead of mne-lsl;
-* optics are always one combined ``Muse-OPTICS`` stream (stream type ``PPG``)
+* optics are always one combined ``Muse-Athena-OPTICS`` stream (stream type ``PPG``)
   carrying every optics channel the preset provides — PPG and fNIRS both;
 * packet loss is detected from the device tick (see ``TickGapDetector``).
 
@@ -185,14 +185,14 @@ class TickGapDetector:
 
 
 class AthenaPublisher:
-    """Decode → device-tick timestamps → regression clock → LSL, for one Athena.
+    """Decode → device-tick timestamps → regression clock → LSL, for one Muse-Athena.
 
     Outlets are created lazily on the first packet of each sensor, because the
     channel count depends on the preset the headset actually honoured.
     Not thread-safe: called from the bridge's single decode thread.
     """
 
-    MODEL = "athena"
+    MODEL = "muse-athena"
 
     def __init__(
         self,
@@ -208,7 +208,7 @@ class AthenaPublisher:
         self.sensors = tuple(s.upper() for s in sensors)
         desc = {
             "manufacturer": "Interaxon",
-            "model": "Muse S Athena",
+            "model": "Muse-Athena",
             "device_id": device_id,
             "bridge": "muse_proxy.bridge",
             "bridge_version": BRIDGE_VERSION,
@@ -235,12 +235,12 @@ class AthenaPublisher:
             return s
         labels = _labels(sensor, n_channels)
         outlet = self._factory(
-            name=f"Muse-{sensor} ({self.device_id})",
+            name=f"Muse-Athena-{sensor} ({self.device_id})",
             stype=_STYPE[sensor],
             labels=labels,
             units=_units(sensor, labels),
             fs=_FS[sensor],
-            source_id=f"athena_{self.device_id}_{sensor.lower()}",
+            source_id=f"muse-athena_{self.device_id}_{sensor.lower()}",
             desc=self._desc,
         )
         s = self.streams[sensor] = _Stream(outlet, len(labels), _FS[sensor])
@@ -359,8 +359,8 @@ class ControlInfo:
         self.serial: str | None = None
 
     def feed(self, data: bytes) -> None:
-        # Muse 2 control notifications carry a 1-byte length prefix before the
-        # text fragment; Athena's are plain text. Strip non-printables either way.
+        # Muse-2 control notifications carry a 1-byte length prefix before the
+        # text fragment; Muse-Athena's are plain text. Strip non-printables either way.
         text = "".join(ch for ch in data.decode("latin-1") if 32 <= ord(ch) < 127)
         self._buf = (self._buf + text)[-4096:]
         if m := _FW_RE.search(self._buf):

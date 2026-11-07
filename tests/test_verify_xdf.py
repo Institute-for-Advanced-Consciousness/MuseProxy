@@ -85,7 +85,7 @@ def test_pass_purity_no_pass_fields() -> None:
 def test_audit_coverage_counts_families() -> None:
     markers = [
         ("session_start:pid=P001:date=20260513", 0.0),
-        ("pass_start:pass=A:device=muse2:source_id=X", 1.0),
+        ("pass_start:pass=A:device=muse-2:source_id=X", 1.0),
         ("block_start:block=1:label=baseline:pass=A:duration_planned_s=300", 2.0),
         ("block_end:block=1:label=baseline:pass=A:duration_actual_s=300", 302.0),
         ("breath:inhale:block=2:cycle=1:pass=A", 303.0),
@@ -297,7 +297,7 @@ def _stream(name: str, stype: str, t0: float, t1: float, srate: float = 64.0):
 
 def test_stream_coverage_clean_when_stream_spans_block() -> None:
     markers = _block_markers([(1, 1, "baseline", 0.0, 300.0)])
-    streams = [_stream("Muse-EEG", "EEG", -5.0, 310.0)]
+    streams = [_stream("Muse-Athena-EEG", "EEG", -5.0, 310.0)]
     report, problems = verify_xdf.audit_stream_coverage(streams, markers)
     assert problems == []
     assert report["n_uncovered"] == 0
@@ -308,7 +308,7 @@ def test_stream_coverage_flags_a_dropout() -> None:
         [(1, 1, "baseline", 0.0, 300.0), (2, 1, "paced_0p1Hz", 310.0, 610.0)]
     )
     # Optics stream dies at t=400 — covers block 1 but not block 2.
-    streams = [_stream("Muse-OPTICS", "PPG", -5.0, 400.0)]
+    streams = [_stream("Muse-Athena-OPTICS", "PPG", -5.0, 400.0)]
     report, problems = verify_xdf.audit_stream_coverage(streams, markers)
     assert report["n_uncovered"] == 1
     assert any("before the block finished" in p and p.startswith("FAIL") for p in problems)
@@ -316,7 +316,7 @@ def test_stream_coverage_flags_a_dropout() -> None:
 
 def test_stream_coverage_flags_late_start() -> None:
     markers = _block_markers([(1, 1, "baseline", 0.0, 300.0)])
-    streams = [_stream("Muse-EEG", "EEG", 50.0, 320.0)]
+    streams = [_stream("Muse-Athena-EEG", "EEG", 50.0, 320.0)]
     _, problems = verify_xdf.audit_stream_coverage(streams, markers)
     assert any("into the block" in p for p in problems)
 
@@ -330,7 +330,7 @@ def test_stream_coverage_empty_stream_flagged() -> None:
 
 def test_stream_coverage_missing_block_end_flagged() -> None:
     markers = [("block_start:block=1:label=baseline:pass=A:duration_planned_s=300", 0.0)]
-    streams = [_stream("Muse-EEG", "EEG", 0.0, 300.0)]
+    streams = [_stream("Muse-Athena-EEG", "EEG", 0.0, 300.0)]
     _, problems = verify_xdf.audit_stream_coverage(streams, markers)
     assert any("no block_end" in p for p in problems)
 
@@ -342,15 +342,15 @@ def test_stream_coverage_missing_block_end_flagged() -> None:
 
 def test_load_data_streams_filters_slow_and_marker_streams() -> None:
     raw = [
-        {"info": {"name": ["Muse-EEG"], "type": ["EEG"], "nominal_srate": ["256"]},
+        {"info": {"name": ["Muse-Athena-EEG"], "type": ["EEG"], "nominal_srate": ["256"]},
          "time_stamps": [1.0, 2.0]},
         {"info": {"name": ["MuseProxyMarkers"], "type": ["Markers"], "nominal_srate": ["0"]},
          "time_stamps": [1.0]},
-        {"info": {"name": ["Muse-BATTERY"], "type": ["Battery"], "nominal_srate": ["1"]},
+        {"info": {"name": ["Muse-Athena-BATTERY"], "type": ["Battery"], "nominal_srate": ["1"]},
          "time_stamps": [1.0]},
     ]
     out = verify_xdf.load_data_streams(raw)
-    assert [d["name"] for d in out] == ["Muse-EEG"]
+    assert [d["name"] for d in out] == ["Muse-Athena-EEG"]
 
 
 # ---------------------------------------------------------------------------
@@ -369,18 +369,18 @@ def _xdf_stream(name: str, stype: str, data, ts, srate: float = 256.0) -> dict:
 
 
 def test_pass_device_from_pass_start() -> None:
-    markers = [("pass_start:pass=B:device=athena:source_id=x", 1.0)]
-    assert verify_xdf.pass_device(markers) == "athena"
+    markers = [("pass_start:pass=B:device=muse-athena:source_id=x", 1.0)]
+    assert verify_xdf.pass_device(markers) == "muse-athena"
 
 
 def test_pass_device_fallback_to_device_marker() -> None:
-    markers = [("pass_a_device:muse2", 0.5), ("pass_b_device:athena", 0.6),
+    markers = [("pass_a_device:muse-2", 0.5), ("pass_b_device:muse-athena", 0.6),
                ("block_start:block=1:pass=A", 1.0)]
-    assert verify_xdf.pass_device(markers) == "muse2"
+    assert verify_xdf.pass_device(markers) == "muse-2"
 
 
 def test_required_streams_missing_athena_is_fail() -> None:
-    """The 2026 failure: Athena pass XDF with CGX + markers only."""
+    """The 2026 failure: Muse-Athena pass XDF with CGX + markers only."""
     import numpy as np
 
     cfg = load_config()
@@ -388,9 +388,9 @@ def test_required_streams_missing_athena_is_fail() -> None:
         _xdf_stream("CGX AIM Phys. Mon. AIM-0106", "EEG", np.ones((10, 2)), np.arange(10)),
         _xdf_stream("MuseProxyMarkers", "Markers", np.zeros((1, 1)), [0.0], 0),
     ]
-    _rows, problems = verify_xdf.audit_required_streams(streams, cfg, "athena")
+    _rows, problems = verify_xdf.audit_required_streams(streams, cfg, "muse-athena")
     fails = [p for p in problems if p.startswith("FAIL")]
-    assert any("Muse-EEG" in p for p in fails) and any("Muse-OPTICS" in p for p in fails)
+    assert any("Muse-Athena-EEG" in p for p in fails) and any("Muse-Athena-OPTICS" in p for p in fails)
 
 
 def test_required_streams_empty_stream_is_fail() -> None:
@@ -400,11 +400,11 @@ def test_required_streams_empty_stream_is_fail() -> None:
     streams = [
         _xdf_stream("CGX AIM Phys. Mon. AIM-0106", "EEG", np.ones((10, 2)), np.arange(10)),
         _xdf_stream("MuseProxyMarkers", "Markers", np.zeros((1, 1)), [0.0], 0),
-        _xdf_stream("Muse2-EEG (1A2B)", "EEG", np.empty((0, 4)), []),
-        _xdf_stream("Muse2-PPG (1A2B)", "PPG", np.ones((5, 3)), np.arange(5), 64),
+        _xdf_stream("Muse-2-EEG (1A2B)", "EEG", np.empty((0, 4)), []),
+        _xdf_stream("Muse-2-PPG (1A2B)", "PPG", np.ones((5, 3)), np.arange(5), 64),
     ]
-    _rows, problems = verify_xdf.audit_required_streams(streams, cfg, "muse2")
-    assert problems == ["FAIL: expected stream 'Muse2-EEG' (EEG) has no samples"]
+    _rows, problems = verify_xdf.audit_required_streams(streams, cfg, "muse-2")
+    assert problems == ["FAIL: expected stream 'Muse-2-EEG' (EEG) has no samples"]
 
 
 def test_signal_integrity_flags_zero_runs_backwards_ts_and_nan() -> None:
@@ -420,7 +420,7 @@ def test_signal_integrity_flags_zero_runs_backwards_ts_and_nan() -> None:
     ppg[::5, 1] = np.nan    # bridge-style NaN marking
     streams = [
         {"name": "Muse", "type": "EEG", "time_stamps": ts, "time_series": eeg},
-        {"name": "Muse2-PPG", "type": "PPG", "time_stamps": np.arange(n) / 64,
+        {"name": "Muse-2-PPG", "type": "PPG", "time_stamps": np.arange(n) / 64,
          "time_series": ppg},
         {"name": "CGX", "type": "EEG", "time_stamps": np.arange(n),
          "time_series": np.c_[np.ones(n), np.zeros(n)]},  # unused channel: flat

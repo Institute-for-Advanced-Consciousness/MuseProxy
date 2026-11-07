@@ -2,7 +2,7 @@
 
 ## Why this exists
 
-The Muse 2 and Muse Athena are consumer EEG headsets with on-device PPG (and on the Athena, fNIRS). They are attractive for high-N field psychophysiology, but three gaps separate them from a research-grade rig:
+The Muse-2 and Muse-Athena are consumer EEG headsets with on-device PPG (and on the Muse-Athena, fNIRS). They are attractive for high-N field psychophysiology, but three gaps separate them from a research-grade rig:
 
 1. **No ECG.** Heart-evoked-potential (HEP) analyses need R-peak timing to roughly tens of milliseconds. PPG peaks lag R-peaks by a participant- and limb-specific pulse-transit time, so PPG alone is not an ECG substitute without modeling.
 2. **No respiration belt.** Respiratory-phase analyses need a per-breath waveform. PPG contains respiration-coupled amplitude and frequency modulation, but extracting a clean breath estimate is non-trivial.
@@ -16,14 +16,14 @@ This study collects ground-truth ECG + respiration-paced data + intentional EMG/
 
 ## Design — minimal viable for the three aims
 
-- **Two-pass per visit.** Each participant runs the full protocol twice — once with Muse 2, once with Muse Athena — so the same physiology under the same paced respiratory ground truth is captured on both devices. With only 5 participants total, running the same person twice controls for cross-participant variance, which would otherwise dominate Aim 3's denoising comparison.
+- **Two-pass per visit.** Each participant runs the full protocol twice — once with Muse-2, once with Muse-Athena — so the same physiology under the same paced respiratory ground truth is captured on both devices. With only 5 participants total, running the same person twice controls for cross-participant variance, which would otherwise dominate Aim 3's denoising comparison.
 - **Three breathing blocks bracket the respiratory frequency space:** spontaneous (baseline), slow paced (0.1 Hz), fast paced (0.2 Hz). 0.1 Hz is near the resonance frequency that maximizes respiratory sinus arrhythmia in many adults, which gives the PPG breath-modulation signal the best chance to be visible.
 - **One 90 s artifact-creation block** deliberately produces the EMG/EOG contamination categories most relevant to the Muse montage: bilateral anterior temporalis (TP9/AF7 and TP10/AF8 contamination), frontalis/corrugator (AF7/AF8 contamination), and the full ocular suite. Each cue is timestamped so analysts can train denoisers against labeled artifact epochs.
 - **Eyes-closed repeats** of jaw clench and brow furrow in the artifact block let the analyst dissociate ocular artifact (which largely vanishes eyes-closed) from muscle artifact (which does not).
 
 ## Counterbalancing
 
-With 5 participants and 2 device orders, we can only approximate counterbalancing. Default scheme: alternate device order across participants (P001 → Muse 2 first; P002 → Athena first; P003 → Muse 2 first; etc.). The app records each participant's order but does not enforce a specific assignment — the operator chooses at intake.
+With 5 participants and 2 device orders, we can only approximate counterbalancing. Default scheme: alternate device order across participants (P001 → Muse-2 first; P002 → Muse-Athena first; P003 → Muse-2 first; etc.). The app records each participant's order but does not enforce a specific assignment — the operator chooses at intake.
 
 ## What the marker stream is for
 
@@ -53,12 +53,12 @@ The trade-off for running the same person twice is order effects (e.g., calmer i
 ## Headset bridge
 
 `python -m muse_proxy.bridge` (`src/muse_proxy/bridge/`) is a companion process
-that connects directly to one Muse 2 or Muse S Athena over BLE and publishes
+that connects directly to one Muse-2 or Muse-Athena over BLE and publishes
 LSL streams; it replaces muselsl and the OpenMuse-.txt relay used in the 2026
 pilot. Dropped packets are NaN (never zero), all timestamps derive from device
 time, and every raw notification is logged. Protocol notes, the 2026 failure
 analysis and the hardware bring-up checklist are in `docs/BLE_BRIDGE.md`. The
-Athena decoder (`athena_decode.py`) and synth (`athena_synth.py`) are vendored
+Muse-Athena decoder (`athena_decode.py`) and synth (`athena_synth.py`) are vendored
 verbatim from the IACS relay — don't restyle them.
 
 ## Operational defaults

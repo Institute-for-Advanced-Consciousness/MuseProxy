@@ -34,8 +34,8 @@ def _open_pass_a(app: Any, tmp_path: Path, *, pid: str) -> dict[str, Any]:
     payload = {
         "pid": pid,
         "date": "20260513",
-        "pass_A_device": "muse2",
-        "pass_B_device": "athena",
+        "pass_A_device": "muse-2",
+        "pass_B_device": "muse-athena",
         "age": 31,
         "sex": "F",
         "handedness": "R",
@@ -55,14 +55,14 @@ def _open_pass_a(app: Any, tmp_path: Path, *, pid: str) -> dict[str, Any]:
     }
     app.participant_id = pid
     app.pass_label = "A"
-    app.pass_a_device = "muse2"
-    app.pass_b_device = "athena"
+    app.pass_a_device = "muse-2"
+    app.pass_b_device = "muse-athena"
     app.intake_payload = payload
 
     data_root = tmp_path / cfg.data_dir
     IntakeWriter(data_root, pid).write(payload)
     writer = PassWriter(
-        data_root, pid, "A", "muse2", config_snapshot=cfg.model_dump()
+        data_root, pid, "A", "muse-2", config_snapshot=cfg.model_dump()
     )
     src = build_source_id(cfg.lsl.source_id_template, "A", pid, payload["date"])
     outlet = MuseProxyMarkerOutlet(
@@ -75,7 +75,7 @@ def _open_pass_a(app: Any, tmp_path: Path, *, pid: str) -> dict[str, Any]:
 
     writer.start_pass(pylsl.local_clock())
     outlet.session_start(pid=pid, date_yyyymmdd=payload["date"])
-    outlet.pass_start(pass_label="A", device="muse2")
+    outlet.pass_start(pass_label="A", device="muse-2")
 
     app.outlet = outlet
     app.writer = writer
@@ -97,7 +97,7 @@ def test_pass_switch_finalizes_pass_a_on_enter(
     pid = f"P{int(time.time() * 1e3) % 1000:03d}"
     _open_pass_a(shared_app, tmp_path, pid=pid)
 
-    pass_a_dir = tmp_path / shared_app.config.data_dir / pid / "pass_A_muse2"
+    pass_a_dir = tmp_path / shared_app.config.data_dir / pid / "pass_A_muse-2"
     assert (pass_a_dir / "PARTIAL_session.json").exists()
 
     ps = shared_app.stages["pass_switch"]
@@ -154,11 +154,11 @@ def test_continue_opens_pass_b_with_new_source_id(
         # Pass label flipped.
         assert shared_app.pass_label == "B"
         # Pass B dir was created with its own PARTIAL.
-        pass_b_dir = tmp_path / shared_app.config.data_dir / pid / "pass_B_athena"
+        pass_b_dir = tmp_path / shared_app.config.data_dir / pid / "pass_B_muse-athena"
         assert (pass_b_dir / "PARTIAL_session.json").exists()
         assert (pass_b_dir / "markers.csv").exists()
         # Pass A dir still intact.
-        pass_a_dir = tmp_path / shared_app.config.data_dir / pid / "pass_A_muse2"
+        pass_a_dir = tmp_path / shared_app.config.data_dir / pid / "pass_A_muse-2"
         assert (pass_a_dir / "session.json").exists()
         # intake.json shared at visit level.
         assert (tmp_path / shared_app.config.data_dir / pid / "intake.json").exists()
@@ -249,12 +249,12 @@ def test_completion_finalizes_pass_b(
     cfg = load_config()
     shared_app.config = cfg  # type: ignore[attr-defined]
     shared_app.participant_id = pid
-    shared_app.pass_a_device = "muse2"
-    shared_app.pass_b_device = "athena"
+    shared_app.pass_a_device = "muse-2"
+    shared_app.pass_b_device = "muse-athena"
     shared_app.pass_label = "B"
 
     data_root = tmp_path / cfg.data_dir
-    writer_b = PassWriter(data_root, pid, "B", "athena",
+    writer_b = PassWriter(data_root, pid, "B", "muse-athena",
                           config_snapshot=cfg.model_dump())
     writer_b.start_pass(0.0)
     src = build_source_id(cfg.lsl.source_id_template, "B", pid, "20260513")
@@ -280,12 +280,12 @@ def test_completion_finalizes_pass_b(
     shared_app.outlet = None
     shared_app.writer = None
 
-    pass_b_dir = data_root / pid / "pass_B_athena"
+    pass_b_dir = data_root / pid / "pass_B_muse-athena"
     assert (pass_b_dir / "session.json").exists()
     doc = json.loads((pass_b_dir / "session.json").read_text(encoding="utf-8"))
     assert doc["status"] == "completed"
     assert doc["pass_label"] == "B"
-    assert doc["device"] == "athena"
+    assert doc["device"] == "muse-athena"
 
 
 def test_pass_a_data_untouched_after_switch(
@@ -294,7 +294,7 @@ def test_pass_a_data_untouched_after_switch(
     """After the pass switch, Pass A's session.json must not change."""
     pid = f"P{int(time.time() * 1e3) % 1000:03d}"
     _open_pass_a(shared_app, tmp_path, pid=pid)
-    pass_a_dir = tmp_path / shared_app.config.data_dir / pid / "pass_A_muse2"
+    pass_a_dir = tmp_path / shared_app.config.data_dir / pid / "pass_A_muse-2"
 
     ps = shared_app.stages["pass_switch"]
     try:

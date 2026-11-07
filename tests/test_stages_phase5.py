@@ -160,7 +160,7 @@ def test_block_breathing_silent_baseline_emits_markers_and_advances(
     shared_app.pass_label = "A"
     shared_app.audio_scheduler = None
     shared_app.outlet = MagicMock()
-    shared_app.writer = PassWriter(tmp_path, "P999", "A", "muse2",
+    shared_app.writer = PassWriter(tmp_path, "P999", "A", "muse-2",
                                    config_snapshot={})
     shared_app.writer.start_pass(start_lsl_ts=0.0)
 

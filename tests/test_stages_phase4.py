@@ -25,7 +25,7 @@ import pytest
 def _fill_intake_minimally(intake_frame: Any, *, pid: str = "P777") -> None:
     """Populate every required form field with a valid value."""
     intake_frame._vars["pid"].set(pid)
-    intake_frame._vars["pass_A_device"].set("Muse 2")
+    intake_frame._vars["pass_A_device"].set("Muse-2")
     intake_frame._vars["age"].set("31")
     intake_frame._vars["caffeine_hours_ago"].set("99")
     intake_frame._vars["last_meal_hours_ago"].set("3.0")
@@ -52,13 +52,13 @@ def test_intake_on_enter_suggests_next_id(shared_app: Any, tmp_path: Path) -> No
 
 
 def test_intake_collect_returns_canonical_devices(shared_app: Any) -> None:
-    """_collect should canonicalize 'Muse 2' → 'muse2'."""
+    """_collect should canonicalize 'Muse-2' → 'muse-2'."""
     intake = shared_app.stages["intake"]
     _fill_intake_minimally(intake)
     out = intake._collect()
     assert out["pid"] == "P777"
-    assert out["pass_A_device"] == "muse2"
-    assert out["pass_B_device"] == "athena"
+    assert out["pass_A_device"] == "muse-2"
+    assert out["pass_B_device"] == "muse-athena"
 
 
 def test_intake_collect_rejects_blank_pid(shared_app: Any) -> None:
@@ -76,18 +76,18 @@ def test_intake_collect_rejects_same_pass_devices(shared_app: Any) -> None:
 
     intake = shared_app.stages["intake"]
     _fill_intake_minimally(intake)
-    intake._vars["pass_A_device"].set("Muse 2")
-    intake._vars["pass_B_device"].set("Muse 2")
+    intake._vars["pass_A_device"].set("Muse-2")
+    intake._vars["pass_B_device"].set("Muse-2")
     with pytest.raises(_IntakeError):
         intake._collect()
 
 
 def test_intake_pass_b_autofills_when_pass_a_changes(shared_app: Any) -> None:
     intake = shared_app.stages["intake"]
-    intake._vars["pass_A_device"].set("Muse 2")
-    assert intake._vars["pass_B_device"].get() == "Muse Athena"
-    intake._vars["pass_A_device"].set("Muse Athena")
-    assert intake._vars["pass_B_device"].get() == "Muse 2"
+    intake._vars["pass_A_device"].set("Muse-2")
+    assert intake._vars["pass_B_device"].get() == "Muse-Athena"
+    intake._vars["pass_A_device"].set("Muse-Athena")
+    assert intake._vars["pass_B_device"].get() == "Muse-2"
 
 
 def test_intake_open_services_creates_outlet_writer_and_intake_json(
@@ -109,8 +109,8 @@ def test_intake_open_services_creates_outlet_writer_and_intake_json(
         # App state populated.
         assert shared_app.participant_id == payload["pid"]
         assert shared_app.pass_label == "A"
-        assert shared_app.pass_a_device == "muse2"
-        assert shared_app.pass_b_device == "athena"
+        assert shared_app.pass_a_device == "muse-2"
+        assert shared_app.pass_b_device == "muse-athena"
         assert shared_app.outlet is not None
         assert shared_app.writer is not None
 
@@ -120,10 +120,10 @@ def test_intake_open_services_creates_outlet_writer_and_intake_json(
         assert intake_path.exists()
         loaded = json.loads(intake_path.read_text(encoding="utf-8"))
         assert loaded["pid"] == payload["pid"]
-        assert loaded["pass_A_device"] == "muse2"
+        assert loaded["pass_A_device"] == "muse-2"
 
         # Pass A dir + PARTIAL_session.json + markers.csv all present.
-        pass_dir = data_root / payload["pid"] / "pass_A_muse2"
+        pass_dir = data_root / payload["pid"] / "pass_A_muse-2"
         assert (pass_dir / "PARTIAL_session.json").exists()
         assert (pass_dir / "markers.csv").exists()
     finally:
@@ -149,7 +149,7 @@ def test_prelaunch_start_disabled_initially(shared_app: Any) -> None:
     pl = shared_app.stages["pre_launch"]
     shared_app.config = load_config()  # type: ignore[attr-defined]
     shared_app.pass_label = "A"
-    shared_app.pass_a_device = "muse2"
+    shared_app.pass_a_device = "muse-2"
     pl.on_enter()
     assert str(pl._start_btn.cget("state")) == "disabled"
 
@@ -160,7 +160,7 @@ def test_prelaunch_start_enables_when_all_ticked(shared_app: Any) -> None:
     pl = shared_app.stages["pre_launch"]
     shared_app.config = load_config()  # type: ignore[attr-defined]
     shared_app.pass_label = "A"
-    shared_app.pass_a_device = "muse2"
+    shared_app.pass_a_device = "muse-2"
     pl.on_enter()
     for v in pl._stream_vars + pl._confirmation_vars:
         v.set(True)
@@ -175,8 +175,8 @@ def test_prelaunch_uses_pass_b_checklist(shared_app: Any) -> None:
     pl = shared_app.stages["pre_launch"]
     shared_app.config = load_config()  # type: ignore[attr-defined]
     shared_app.pass_label = "B"
-    shared_app.pass_a_device = "muse2"
-    shared_app.pass_b_device = "athena"
+    shared_app.pass_a_device = "muse-2"
+    shared_app.pass_b_device = "muse-athena"
     pl.on_enter()
     # Count checkboxes for Pass B.
     n_streams = len(pl._stream_vars)
@@ -186,7 +186,7 @@ def test_prelaunch_uses_pass_b_checklist(shared_app: Any) -> None:
     # Heading should mention Pass B + athena
     text = pl._heading.cget("text").lower()
     assert "pass b" in text
-    assert "athena" in text
+    assert "muse-athena" in text
 
 
 # ---------------------------------------------------------------------------

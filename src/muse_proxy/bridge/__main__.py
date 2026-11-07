@@ -3,9 +3,9 @@
 Examples (from the repo root)::
 
     uv run python -m muse_proxy.bridge scan
-    uv run python -m muse_proxy.bridge stream --model muse2  --address 00:55:DA:B7:E0:14
-    uv run python -m muse_proxy.bridge stream --model athena --name MuseS-0DBB
-    uv run python -m muse_proxy.bridge stream --model muse2 --fake --duration 20
+    uv run python -m muse_proxy.bridge stream --model muse-2  --address 00:55:DA:B7:E0:14
+    uv run python -m muse_proxy.bridge stream --model muse-athena --name MuseS-0DBB
+    uv run python -m muse_proxy.bridge stream --model muse-2 --fake --duration 20
 
 ``stream`` refuses to guess: if more than one matching headset is in range and
 neither ``--address`` nor ``--name`` was given, it lists them and exits. In a
@@ -39,15 +39,28 @@ def _scan(timeout: float) -> list:
         loop.close()
 
 
+_MODEL_ALIASES = {"muse-2": "muse-2", "muse2": "muse-2", "muse-athena": "muse-athena",
+                  "museathena": "muse-athena", "athena": "muse-athena"}
+LABELS = {"muse-2": "Muse-2", "muse-athena": "Muse-Athena", "unknown": "unknown"}
+
+
+def _model_arg(value: str) -> str:
+    try:
+        return _MODEL_ALIASES[value.strip().lower()]
+    except KeyError:
+        raise argparse.ArgumentTypeError("must be muse-2 or muse-athena") from None
+
+
 def cmd_scan(args: argparse.Namespace) -> int:
     print(f"Scanning {args.timeout:.0f} s for Muse headsets...")
     found = _scan(args.timeout)
     if not found:
         print("None found. Is the headset on (LED pulsing) and NOT connected to a phone?")
         return 1
-    print(f"{'model':<8} {'name':<14} {'address':<40} {'id':<6} rssi")
+    print(f"{'device':<12} {'name':<14} {'address':<40} {'id':<6} rssi")
     for d in found:
-        print(f"{d.model:<8} {d.name:<14} {d.address:<40} {d.device_id:<6} {d.rssi}")
+        print(f"{LABELS.get(d.model, d.model):<12} {d.name:<14} {d.address:<40} "
+              f"{d.device_id:<6} {d.rssi}")
     return 0
 
 
@@ -65,7 +78,7 @@ def _pick_target(args: argparse.Namespace) -> Target | None:
     if args.name:
         found = [d for d in found if d.name.lower() == args.name.lower()]
     if not found:
-        print(f"No {args.model} headset matching the filters is advertising.")
+        print(f"No {LABELS[args.model]} headset matching the filters is advertising.")
         return None
     if len(found) > 1:
         print("More than one headset matches — pass --address or --name to choose:")
@@ -76,8 +89,9 @@ def _pick_target(args: argparse.Namespace) -> Target | None:
     return Target(d.model, d.name, d.address, d.device_id, d.rssi, d.ble_device)
 
 
-def _status_line(s: dict) -> str:
-    parts = [f"[{time.strftime('%H:%M:%S')}] {s['state']:<12}"]
+def _status_line(s: dict, label: str = "") -> str:
+    head = f"[{time.strftime('%H:%M:%S')}] {label}".rstrip()
+    parts = [f"{head} {s['state']:<12}"]
     if s["battery"] is not None:
         parts.append(f"batt {s['battery']:.0f}%")
     parts.append(f"pkts {s['packets']}")
@@ -114,7 +128,7 @@ def cmd_stream(args: argparse.Namespace) -> int:
         stop["flag"] = True
 
     signal.signal(signal.SIGINT, _sig)
-    print(f"Connecting to {target.name} ({target.address}) as {target.model}...")
+    print(f"Connecting to {LABELS[target.model]} {target.name} ({target.address})...")
     if bridge.raw is not None:
         print(f"Raw packet log: {bridge.raw.path}")
     bridge.start()
@@ -122,14 +136,14 @@ def cmd_stream(args: argparse.Namespace) -> int:
     try:
         while not stop["flag"]:
             time.sleep(args.status_interval)
-            print(_status_line(bridge.snapshot()), flush=True)
+            print(_status_line(bridge.snapshot(), LABELS[target.model]), flush=True)
             if args.duration and time.monotonic() - t0 >= args.duration:
                 break
     finally:
         print("Stopping...")
         bridge.stop()
         snap = bridge.snapshot()
-        print(_status_line(snap))
+        print(_status_line(snap, LABELS[target.model]))
         for k, v in snap["streams"].items():
             if isinstance(v, dict):
                 print(f"  {k}: {v}")
@@ -138,7 +152,14 @@ def cmd_stream(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     if sys.platform == "win32":
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        # Proactor is already the Windows default (and new_ble_loop uses it
+        # explicitly); this only matters on old Pythons. Silence the 3.14+
+        # deprecation notice so it doesn't clutter the RA's console.
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
     p = argparse.ArgumentParser(prog="muse_proxy.bridge", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -147,14 +168,15 @@ def main(argv: list[str] | None = None) -> int:
     s.set_defaults(func=cmd_scan)
 
     st = sub.add_parser("stream", help="connect to one headset and publish LSL streams")
-    st.add_argument("--model", choices=["muse2", "athena"], required=True)
+    st.add_argument("--model", type=_model_arg, required=True,
+                    help="muse-2 or muse-athena")
     st.add_argument("--address", help="BLE address from `scan` (recommended)")
     st.add_argument("--name", help="advertised name, e.g. Muse-1A2B")
-    st.add_argument("--preset", help="override preset (muse2: p50; athena: p1035)")
-    st.add_argument("--aux", action="store_true", help="Muse 2: also stream the AUX channel")
-    st.add_argument("--no-imu", action="store_true", help="Muse 2: skip ACC/GYRO")
+    st.add_argument("--preset", help="override preset (Muse-2: p50; Muse-Athena: p1035)")
+    st.add_argument("--aux", action="store_true", help="Muse-2: also stream the AUX channel")
+    st.add_argument("--no-imu", action="store_true", help="Muse-2: skip ACC/GYRO")
     st.add_argument("--athena-gap-correction", action="store_true",
-                    help="Athena: shift samples after a detected packet loss (experimental)")
+                    help="Muse-Athena: shift samples after a detected packet loss (experimental)")
     st.add_argument("--raw-dir", default="Data/raw_ble", help="raw packet log directory")
     st.add_argument("--no-raw-log", action="store_true")
     st.add_argument("--scan-timeout", type=float, default=8.0)

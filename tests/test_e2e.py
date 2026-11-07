@@ -94,7 +94,7 @@ class _DoneHandle:
 
 def _populate_intake(intake_frame: Any, pid: str) -> None:
     intake_frame._vars["pid"].set(pid)
-    intake_frame._vars["pass_A_device"].set("Muse 2")
+    intake_frame._vars["pass_A_device"].set("Muse-2")
     intake_frame._vars["age"].set("31")
     intake_frame._vars["caffeine_hours_ago"].set("99")
     intake_frame._vars["last_meal_hours_ago"].set("3.0")
@@ -262,8 +262,8 @@ def test_full_visit_walkthrough(shared_app: Any, tmp_path: Path) -> None:
 
     # Assertions on the final on-disk state.
     data_root = tmp_path / cfg.data_dir
-    pass_a_session = data_root / pid / "pass_A_muse2" / "session.json"
-    pass_b_session = data_root / pid / "pass_B_athena" / "session.json"
+    pass_a_session = data_root / pid / "pass_A_muse-2" / "session.json"
+    pass_b_session = data_root / pid / "pass_B_muse-athena" / "session.json"
     intake_json = data_root / pid / "intake.json"
 
     assert intake_json.exists()
@@ -273,8 +273,8 @@ def test_full_visit_walkthrough(shared_app: Any, tmp_path: Path) -> None:
     b_doc = json.loads(pass_b_session.read_text(encoding="utf-8"))
     assert a_doc["status"] == "completed"
     assert b_doc["status"] == "completed"
-    assert a_doc["device"] == "muse2"
-    assert b_doc["device"] == "athena"
+    assert a_doc["device"] == "muse-2"
+    assert b_doc["device"] == "muse-athena"
     assert a_doc["pass_label"] == "A"
     assert b_doc["pass_label"] == "B"
     # Both passes have 4 blocks each, all completed.
@@ -284,8 +284,8 @@ def test_full_visit_walkthrough(shared_app: Any, tmp_path: Path) -> None:
     assert all(b["status"] == "completed" for b in b_doc["blocks"])
 
     # markers.csv content — Pass A markers carry pass=A only, B carries B only.
-    pass_a_csv = (data_root / pid / "pass_A_muse2" / "markers.csv").read_text()
-    pass_b_csv = (data_root / pid / "pass_B_athena" / "markers.csv").read_text()
+    pass_a_csv = (data_root / pid / "pass_A_muse-2" / "markers.csv").read_text()
+    pass_b_csv = (data_root / pid / "pass_B_muse-athena" / "markers.csv").read_text()
     assert "pass=A" in pass_a_csv
     assert "pass=A" not in pass_b_csv
     assert "pass=B" in pass_b_csv

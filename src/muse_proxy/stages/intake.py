@@ -27,7 +27,7 @@ from ._base import StageFrame
 logger = logging.getLogger(__name__)
 
 
-_DEVICE_CHOICES = ("Muse 2", "Muse Athena")
+_DEVICE_CHOICES = ("Muse-2", "Muse-Athena")
 _SEX_CHOICES = ("M", "F", "Other", "Prefer not to say")
 _HANDEDNESS_CHOICES = ("R", "L", "Ambi")
 _YN_CHOICES = ("Y", "N")

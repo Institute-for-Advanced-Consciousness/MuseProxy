@@ -156,15 +156,15 @@ def test_must_have_exactly_4_blocks(tmp_path: Path) -> None:
 
 def test_streams_for_muse2_includes_always_required() -> None:
     cfg = load_config()
-    streams = cfg.streams_for_device("muse2")
+    streams = cfg.streams_for_device("muse-2")
     names = [s.name for s in streams]
     assert "AIM" in names
-    assert "Muse2-EEG" in names and "Muse2-PPG" in names
+    assert "Muse-2-EEG" in names and "Muse-2-PPG" in names
     assert "MuseProxyMarkers" in names
 
 
 def test_device_stream_names_cannot_cross_match() -> None:
-    """A Muse 2 stream must never satisfy an Athena spec (and vice versa), and
+    """A Muse-2 stream must never satisfy an Muse-Athena spec (and vice versa), and
     neither may a legacy muselsl outlet named plain "Muse"."""
     cfg = load_config()
     m2 = [s.name.lower() for s in cfg.pre_launch_streams.muse_2]
@@ -179,7 +179,7 @@ def test_device_stream_names_cannot_cross_match() -> None:
 
 def test_streams_for_athena_includes_eeg_ppg_and_aim() -> None:
     cfg = load_config()
-    streams = cfg.streams_for_device("athena")
+    streams = cfg.streams_for_device("muse-athena")
     types = {s.type for s in streams}
     # Per-stream monitoring needs EEG and PPG tracked separately.
     assert "EEG" in types
@@ -196,13 +196,13 @@ def test_streams_for_device_unknown_raises() -> None:
 @pytest.mark.parametrize(
     "raw,canon",
     [
-        ("muse2", "muse2"),
-        ("Muse 2", "muse2"),
-        ("muse_2", "muse2"),
-        ("athena", "athena"),
-        ("Muse Athena", "athena"),
-        ("muse_athena", "athena"),
-        ("MUSE 2", "muse2"),
+        ("muse-2", "muse-2"),
+        ("Muse-2", "muse-2"),
+        ("muse_2", "muse-2"),
+        ("muse-athena", "muse-athena"),
+        ("Muse-Athena", "muse-athena"),
+        ("muse_athena", "muse-athena"),
+        ("MUSE 2", "muse-2"),
     ],
 )
 def test_canon_device(raw: str, canon: str) -> None:
@@ -275,7 +275,7 @@ def test_minimal_inline_config_validates() -> None:
           muse_2:
             - {name: Muse, description: x}
           muse_athena:
-            - {name: Athena, description: x}
+            - {name: Muse-Athena, description: x}
         pre_launch_manual_confirmations:
           pass_a: [a]
           pass_b: [b]
@@ -305,3 +305,14 @@ def test_minimal_inline_config_validates() -> None:
     import yaml as _yaml
     cfg = Config.model_validate(_yaml.safe_load(yaml_text))
     assert cfg.lsl.outlet_name == "M"
+
+
+def test_device_codes_and_legacy_aliases():
+    from muse_proxy.config import canon_device, device_label
+
+    for raw in ("Muse-2", "Muse 2", "muse2", "MUSE_2"):
+        assert canon_device(raw) == "muse-2"
+        assert device_label(raw) == "Muse-2"
+    for raw in ("Muse-Athena", "Muse Athena", "athena", "muse_athena"):
+        assert canon_device(raw) == "muse-athena"
+        assert device_label(raw) == "Muse-Athena"

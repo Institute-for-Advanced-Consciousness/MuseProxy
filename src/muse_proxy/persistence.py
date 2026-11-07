@@ -184,7 +184,7 @@ class PassWriter:
     """Owns all on-disk artifacts for one pass of one visit.
 
     Lifecycle:
-      writer = PassWriter(root, pid, "A", "muse2", config_snapshot=cfg.model_dump())
+      writer = PassWriter(root, pid, "A", "muse-2", config_snapshot=cfg.model_dump())
       writer.start_pass(lsl_ts, iso)
       rec = writer.start_block(1, "baseline", 300.0, start_lsl)
       ...

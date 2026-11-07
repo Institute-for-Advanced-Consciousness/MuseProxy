@@ -1,4 +1,4 @@
-"""Supervised BLE → LSL session for one headset (Muse 2 or Athena).
+"""Supervised BLE → LSL session for one headset (Muse-2 or Muse-Athena).
 
 Architecture follows the IACS relay's ``DeviceBridge``:
 
@@ -74,7 +74,7 @@ class State:
 
 @dataclass
 class Target:
-    model: str               # "muse2" | "athena"
+    model: str               # "muse-2" | "muse-athena"
     name: str                # advertised name, e.g. "Muse-1A2B" / "MuseS-0DBB"
     address: str             # MAC (Windows/Linux) or CoreBluetooth UUID (macOS)
     device_id: str           # stable id used in stream names/source_ids
@@ -85,8 +85,8 @@ class Target:
 @dataclass
 class BridgeConfig:
     preset: str | None = None             # None → model default
-    prime: bool = True                    # Athena cold-start prime
-    include_aux: bool = False             # Muse 2 AUX channel
+    prime: bool = True                    # Muse-Athena cold-start prime
+    include_aux: bool = False             # Muse-2 AUX channel
     include_imu: bool = True
     athena_gap_correction: bool = False   # see athena.TickGapDetector
     keepalive_interval: float = 5.0
@@ -122,7 +122,7 @@ class DeviceBridge:
             transport = BleakTransport()
         self._transport = transport
         self.model = target.model
-        if self.model == "muse2":
+        if self.model == "muse-2":
             self.publisher: Any = muse2.Muse2Publisher(
                 target.device_id, include_aux=self.cfg.include_aux,
                 include_imu=self.cfg.include_imu,
@@ -131,7 +131,7 @@ class DeviceBridge:
             self._preset = self.cfg.preset or muse2.DEFAULT_PRESET
             self._keepalive = muse2.KEEPALIVE_TOKEN
             self._control_uuid = muse2.CONTROL_UUID
-        elif self.model == "athena":
+        elif self.model == "muse-athena":
             self.publisher = athena.AthenaPublisher(
                 target.device_id,
                 gap_correction=self.cfg.athena_gap_correction,
@@ -287,7 +287,7 @@ class DeviceBridge:
                         except OSError as exc:
                             self._set_error(f"raw log write failed: {exc}")
                     try:
-                        if self.model == "muse2":
+                        if self.model == "muse-2":
                             pub.process(arrival, uuid, raw)
                         else:
                             pub.process(arrival, utc, uuid, raw)
@@ -409,7 +409,7 @@ class DeviceBridge:
             self._event("warn", f"send {token}: {exc!r}")
 
     async def _handshake(self, client: Any) -> None:
-        if self.model == "muse2":
+        if self.model == "muse-2":
             steps = muse2.handshake_tokens(self._preset)
         else:
             steps = athena.handshake_tokens(self._preset,
@@ -447,14 +447,14 @@ class DeviceBridge:
                 return False, "subscribe_failed"
             # New link segment: flush/reset timelines before any new data lands.
             self._put(("segment",))
-            # Muse 2 has no prime phase: accept from the start command onward.
-            # Athena must discard the p21 prime burst until the target preset is live.
-            self._accept = self.model == "muse2"
+            # Muse-2 has no prime phase: accept from the start command onward.
+            # Muse-Athena must discard the p21 prime burst until the target preset is live.
+            self._accept = self.model == "muse-2"
             await self._handshake(client)
             self._accept = True
             if not await self._await_first_data():
-                await self._send(client, "d" if self.model == "muse2" else "dc001")
-                if self.model == "athena":
+                await self._send(client, "d" if self.model == "muse-2" else "dc001")
+                if self.model == "muse-athena":
                     await self._send(client, "L1")
                 if not await self._await_first_data():
                     return False, "no_data"
@@ -493,7 +493,7 @@ class DeviceBridge:
             if age > self.cfg.soft_stall_s:
                 if not soft_done:
                     self._event("warn", f"data quiet {age:.1f}s; re-asserting stream")
-                    if self.model == "muse2":
+                    if self.model == "muse-2":
                         await self._send(client, "d")
                     else:
                         await self._send(client, "dc001")
@@ -514,7 +514,7 @@ class DeviceBridge:
 
     def _on_data(self, char: Any, data: bytearray) -> None:
         if not self._accept:
-            return  # handshake/prime traffic (e.g. Athena p21 EEG4 burst)
+            return  # handshake/prime traffic (e.g. Muse-Athena p21 EEG4 burst)
         uuid = str(getattr(char, "uuid", char)).lower()
         if uuid not in self._known_uuids:
             self.unknown_uuid += 1

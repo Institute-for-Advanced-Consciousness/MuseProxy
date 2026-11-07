@@ -29,7 +29,7 @@ lsl:
 # -----------------------------------------------------------------------------
 # Operator MUST edit `name` substrings to match the actual streams produced by
 # whichever Muse-streaming software is in use (BlueMuse, Petal Metrics,
-# Mind Monitor, or Athena-side software). Matched as case-insensitive substring.
+# Mind Monitor, or Muse-Athena-side software). Matched as case-insensitive substring.
 #
 # `type` is the LSL stream type. The live stream-health monitor matches on
 # name substring AND type, so EEG and PPG are tracked separately — a Muse PPG
@@ -45,24 +45,24 @@ pre_launch_streams:
       type: "Markers"
       description: "This app's marker stream"
   # Names match the direct-BLE bridge (`python -m muse_proxy.bridge stream`).
-  # They are deliberately device-distinct: "Muse2-EEG" never matches an Athena
-  # stream ("Muse-EEG (<id>)") and vice versa, and neither matches a legacy
+  # They are deliberately device-distinct: "Muse-2-EEG" never matches an Muse-Athena
+  # stream ("Muse-Athena-EEG (<id>)") and vice versa, and neither matches a legacy
   # muselsl outlet (plain "Muse"), so a leftover stream from the other device
   # or the old pipeline cannot satisfy the checklist.
   muse_2:
-    - name: "Muse2-EEG"
+    - name: "Muse-2-EEG"
       type: "EEG"
-      description: "Muse 2 — EEG (TP9 / AF7 / AF8 / TP10) via MuseProxy bridge"
-    - name: "Muse2-PPG"
+      description: "Muse-2 — EEG (TP9 / AF7 / AF8 / TP10) via MuseProxy bridge"
+    - name: "Muse-2-PPG"
       type: "PPG"
-      description: "Muse 2 — PPG (ambient / IR / red) via MuseProxy bridge"
+      description: "Muse-2 — PPG (ambient / IR / red) via MuseProxy bridge"
   muse_athena:
-    - name: "Muse-EEG"
+    - name: "Muse-Athena-EEG"
       type: "EEG"
-      description: "Muse Athena — EEG via MuseProxy bridge"
-    - name: "Muse-OPTICS"
+      description: "Muse-Athena — EEG via MuseProxy bridge"
+    - name: "Muse-Athena-OPTICS"
       type: "PPG"
-      description: "Muse Athena — optics (PPG / fNIRS) via MuseProxy bridge"
+      description: "Muse-Athena — optics (PPG / fNIRS) via MuseProxy bridge"
 
 # Additional manual confirmations the RA ticks on the pre-launch screen
 pre_launch_manual_confirmations:

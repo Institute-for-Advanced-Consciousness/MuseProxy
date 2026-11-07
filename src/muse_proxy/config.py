@@ -199,14 +199,14 @@ class Config(_StrictModel):
     def streams_for_device(self, device: str) -> list[StreamRef]:
         """Return the expected pre-launch stream list for the given device.
 
-        device is the canonical short name: ``muse2`` or ``athena``.
+        device is ``muse-2`` or ``muse-athena`` (aliases accepted, see ``canon_device``).
         """
         d = _canon_device(device)
-        if d == "muse2":
+        if d == "muse-2":
             return list(self.pre_launch_streams.always_required) + list(
                 self.pre_launch_streams.muse_2
             )
-        if d == "athena":
+        if d == "muse-athena":
             return list(self.pre_launch_streams.always_required) + list(
                 self.pre_launch_streams.muse_athena
             )
@@ -276,14 +276,30 @@ def next_participant_id(
 # Device-name canonicalisation
 # ---------------------------------------------------------------------------
 
+# Canonical codes are "muse-2" and "muse-athena" (used in folder names, markers
+# and the bridge CLI). The pre-rename codes "muse2" / "athena" (2026 pilot data)
+# are still accepted so old files remain readable.
 _DEVICE_ALIASES = {
-    "muse2": "muse2",
-    "muse 2": "muse2",
-    "muse_2": "muse2",
-    "athena": "athena",
-    "muse athena": "athena",
-    "muse_athena": "athena",
+    "muse-2": "muse-2",
+    "muse 2": "muse-2",
+    "muse_2": "muse-2",
+    "muse2": "muse-2",
+    "muse-athena": "muse-athena",
+    "muse athena": "muse-athena",
+    "muse_athena": "muse-athena",
+    "museathena": "muse-athena",
+    "athena": "muse-athena",
 }
+
+DEVICE_LABELS = {"muse-2": "Muse-2", "muse-athena": "Muse-Athena"}
+
+
+def device_label(device: str) -> str:
+    """Display label for a device code: ``Muse-2`` or ``Muse-Athena``."""
+    try:
+        return DEVICE_LABELS[_canon_device(device)]
+    except KeyError:
+        return device
 
 
 def _canon_device(device: str) -> str:
@@ -291,8 +307,8 @@ def _canon_device(device: str) -> str:
 
 
 def canon_device(device: str) -> str:
-    """Public canonicaliser. Maps Muse-2 / Muse 2 / muse2 → ``muse2``;
-    Athena / Muse Athena → ``athena``. Raises KeyError on unknown."""
+    """Public canonicaliser. Maps Muse-2 / Muse 2 / muse2 → ``muse-2``;
+    Muse-Athena / Muse Athena / athena → ``muse-athena``. Raises KeyError on unknown."""
     return _canon_device(device)
 
 

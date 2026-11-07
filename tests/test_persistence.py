@@ -55,13 +55,13 @@ def test_atomic_write_overwrites_existing(tmp_path: Path) -> None:
 
 
 def test_pass_dir_layout(tmp_path: Path) -> None:
-    d = pass_dir(tmp_path, "P007", "A", "muse2")
-    assert d == tmp_path / "P007" / "pass_A_muse2"
+    d = pass_dir(tmp_path, "P007", "A", "muse-2")
+    assert d == tmp_path / "P007" / "pass_A_muse-2"
 
 
 def test_pass_dir_invalid_label(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
-        pass_dir(tmp_path, "P001", "C", "muse2")
+        pass_dir(tmp_path, "P001", "C", "muse-2")
 
 
 # ---------------------------------------------------------------------------
@@ -98,20 +98,20 @@ def test_intake_writer_rejects_divergent_overwrite(tmp_path: Path) -> None:
 
 
 def test_pass_writer_creates_dir_and_partial(tmp_path: Path) -> None:
-    w = PassWriter(tmp_path, "P001", "A", "muse2", config_snapshot={"k": "v"})
-    assert w.dir == tmp_path / "P001" / "pass_A_muse2"
+    w = PassWriter(tmp_path, "P001", "A", "muse-2", config_snapshot={"k": "v"})
+    assert w.dir == tmp_path / "P001" / "pass_A_muse-2"
     w.start_pass(start_lsl_ts=100.0)
     partial = w.dir / "PARTIAL_session.json"
     assert partial.exists()
     doc = json.loads(partial.read_text(encoding="utf-8"))
     assert doc["pid"] == "P001"
     assert doc["pass_label"] == "A"
-    assert doc["device"] == "muse2"
+    assert doc["device"] == "muse-2"
     assert doc["status"] == "in_progress"
 
 
 def test_pass_writer_records_block_lifecycle(tmp_path: Path) -> None:
-    w = PassWriter(tmp_path, "P001", "A", "muse2")
+    w = PassWriter(tmp_path, "P001", "A", "muse-2")
     w.start_pass(start_lsl_ts=1000.0)
     rec = w.start_block(1, "baseline", 300.0, start_lsl=1001.0)
     assert isinstance(rec, BlockRecord)
@@ -128,7 +128,7 @@ def test_pass_writer_records_block_lifecycle(tmp_path: Path) -> None:
 
 
 def test_pass_writer_finalize_completed_removes_partial(tmp_path: Path) -> None:
-    w = PassWriter(tmp_path, "P001", "A", "muse2")
+    w = PassWriter(tmp_path, "P001", "A", "muse-2")
     w.start_pass(start_lsl_ts=0.0)
     rec = w.start_block(1, "baseline", 5.0, start_lsl=0.0)
     w.end_block(rec, end_lsl=5.0)
@@ -141,7 +141,7 @@ def test_pass_writer_finalize_completed_removes_partial(tmp_path: Path) -> None:
 
 
 def test_pass_writer_finalize_aborted_retains_partial(tmp_path: Path) -> None:
-    w = PassWriter(tmp_path, "P001", "A", "muse2")
+    w = PassWriter(tmp_path, "P001", "A", "muse-2")
     w.start_pass(start_lsl_ts=0.0)
     w.start_block(1, "baseline", 5.0, start_lsl=0.0)
     # never call end_block - block stays in_progress
@@ -155,7 +155,7 @@ def test_pass_writer_finalize_aborted_retains_partial(tmp_path: Path) -> None:
 
 
 def test_mark_pending_blocks_aborted_writes_block_csv(tmp_path: Path) -> None:
-    w = PassWriter(tmp_path, "P001", "A", "muse2")
+    w = PassWriter(tmp_path, "P001", "A", "muse-2")
     w.start_pass(start_lsl_ts=0.0)
     w.start_block(1, "baseline", 5.0, start_lsl=0.0)
     n = w.mark_pending_blocks_aborted()
@@ -166,7 +166,7 @@ def test_mark_pending_blocks_aborted_writes_block_csv(tmp_path: Path) -> None:
 
 
 def test_mark_pending_blocks_aborted_skips_completed(tmp_path: Path) -> None:
-    w = PassWriter(tmp_path, "P001", "A", "muse2")
+    w = PassWriter(tmp_path, "P001", "A", "muse-2")
     w.start_pass(start_lsl_ts=0.0)
     rec = w.start_block(1, "baseline", 5.0, start_lsl=0.0)
     w.end_block(rec, end_lsl=5.0)
@@ -178,14 +178,14 @@ def test_mark_pending_blocks_aborted_skips_completed(tmp_path: Path) -> None:
 
 
 def test_pass_writer_finalize_bad_status_raises(tmp_path: Path) -> None:
-    w = PassWriter(tmp_path, "P001", "A", "muse2")
+    w = PassWriter(tmp_path, "P001", "A", "muse-2")
     w.start_pass(start_lsl_ts=0.0)
     with pytest.raises(ValueError):
         w.finalize(status="kinda done")
 
 
 def test_end_block_bad_status_raises(tmp_path: Path) -> None:
-    w = PassWriter(tmp_path, "P001", "A", "muse2")
+    w = PassWriter(tmp_path, "P001", "A", "muse-2")
     w.start_pass(start_lsl_ts=0.0)
     rec = w.start_block(1, "baseline", 5.0, start_lsl=0.0)
     with pytest.raises(ValueError):
@@ -200,7 +200,7 @@ def test_end_block_bad_status_raises(tmp_path: Path) -> None:
 def test_two_pass_separate_dirs(tmp_path: Path) -> None:
     """The two passes write to distinct dirs; intake.json is shared."""
     # Pass A
-    w_a = PassWriter(tmp_path, "P001", "A", "muse2", config_snapshot={"pass": "A"})
+    w_a = PassWriter(tmp_path, "P001", "A", "muse-2", config_snapshot={"pass": "A"})
     w_a.start_pass(start_lsl_ts=0.0)
     rec = w_a.start_block(1, "baseline", 5.0, start_lsl=0.0)
     w_a.end_block(rec, end_lsl=5.0)
@@ -211,40 +211,40 @@ def test_two_pass_separate_dirs(tmp_path: Path) -> None:
     IntakeWriter(tmp_path, "P001").write(intake)
 
     # Pass B
-    w_b = PassWriter(tmp_path, "P001", "B", "athena", config_snapshot={"pass": "B"})
+    w_b = PassWriter(tmp_path, "P001", "B", "muse-athena", config_snapshot={"pass": "B"})
     w_b.start_pass(start_lsl_ts=1000.0)
     rec_b = w_b.start_block(1, "baseline", 5.0, start_lsl=1000.0)
     w_b.end_block(rec_b, end_lsl=1005.0)
     w_b.finalize(status="completed")
 
     assert (tmp_path / "P001" / "intake.json").exists()
-    assert (tmp_path / "P001" / "pass_A_muse2" / "session.json").exists()
-    assert (tmp_path / "P001" / "pass_B_athena" / "session.json").exists()
+    assert (tmp_path / "P001" / "pass_A_muse-2" / "session.json").exists()
+    assert (tmp_path / "P001" / "pass_B_muse-athena" / "session.json").exists()
     # No cross-pollution: each session.json names its own pass.
-    a = json.loads((tmp_path / "P001" / "pass_A_muse2" / "session.json").read_text())
-    b = json.loads((tmp_path / "P001" / "pass_B_athena" / "session.json").read_text())
-    assert a["pass_label"] == "A" and a["device"] == "muse2"
-    assert b["pass_label"] == "B" and b["device"] == "athena"
+    a = json.loads((tmp_path / "P001" / "pass_A_muse-2" / "session.json").read_text())
+    b = json.loads((tmp_path / "P001" / "pass_B_muse-athena" / "session.json").read_text())
+    assert a["pass_label"] == "A" and a["device"] == "muse-2"
+    assert b["pass_label"] == "B" and b["device"] == "muse-athena"
     assert a["config_snapshot"] == {"pass": "A"}
     assert b["config_snapshot"] == {"pass": "B"}
 
 
 def test_pass_b_abort_does_not_touch_pass_a(tmp_path: Path) -> None:
     """If Pass B aborts, Pass A's session.json must remain intact."""
-    w_a = PassWriter(tmp_path, "P001", "A", "muse2")
+    w_a = PassWriter(tmp_path, "P001", "A", "muse-2")
     w_a.start_pass(start_lsl_ts=0.0)
     rec = w_a.start_block(1, "baseline", 5.0, start_lsl=0.0)
     w_a.end_block(rec, end_lsl=5.0)
     w_a.finalize(status="completed")
-    pass_a_doc_before = (tmp_path / "P001" / "pass_A_muse2" / "session.json").read_text()
+    pass_a_doc_before = (tmp_path / "P001" / "pass_A_muse-2" / "session.json").read_text()
 
-    w_b = PassWriter(tmp_path, "P001", "B", "athena")
+    w_b = PassWriter(tmp_path, "P001", "B", "muse-athena")
     w_b.start_pass(start_lsl_ts=1000.0)
     w_b.start_block(1, "baseline", 5.0, start_lsl=1000.0)
     w_b.mark_pending_blocks_aborted()
     w_b.finalize(status="aborted")
 
-    pass_a_doc_after = (tmp_path / "P001" / "pass_A_muse2" / "session.json").read_text()
+    pass_a_doc_after = (tmp_path / "P001" / "pass_A_muse-2" / "session.json").read_text()
     assert pass_a_doc_before == pass_a_doc_after
 
 
@@ -279,7 +279,7 @@ def test_markers_csv_appender_appends_without_re_header(tmp_path: Path) -> None:
 
 
 def test_pass_writer_open_markers_csv_writes_to_pass_dir(tmp_path: Path) -> None:
-    w = PassWriter(tmp_path, "P001", "A", "muse2")
+    w = PassWriter(tmp_path, "P001", "A", "muse-2")
     with w.open_markers_csv() as a:
         a.append("2026-05-13T10:00:00", 1.0, "session_start")
     assert (w.dir / "markers.csv").exists()
@@ -291,7 +291,7 @@ def test_pass_writer_open_markers_csv_writes_to_pass_dir(tmp_path: Path) -> None
 
 
 def test_block_csv_contains_event_rows(tmp_path: Path) -> None:
-    w = PassWriter(tmp_path, "P001", "A", "muse2")
+    w = PassWriter(tmp_path, "P001", "A", "muse-2")
     w.start_pass(start_lsl_ts=0.0)
     rec = w.start_block(2, "paced_0p1Hz", 300.0, start_lsl=0.0)
     events = [

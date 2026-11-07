@@ -2,7 +2,7 @@
 
 Experiment control + LSL marker stream for the IACS *Muse Proxy Metrics and Denoising Study*.
 
-Each participant visit runs the protocol **twice** in one sitting — once wearing the Muse 2, once wearing the Muse Athena — with an in-app device swap between passes. Each pass produces its own Lab Recorder XDF.
+Each participant visit runs the protocol **twice** in one sitting — once wearing the Muse-2, once wearing the Muse-Athena — with an in-app device swap between passes. Each pass produces its own Lab Recorder XDF.
 
 > Full scientific brief: [`CLAUDE.md`](./CLAUDE.md).
 > Authoritative build spec: [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
@@ -23,11 +23,11 @@ The installer fetches `uv`, runs `uv sync`, renders all audio assets via `edge-t
 1. Plug headphones into the laptop. Verify the participant can hear comfortably.
 2. Start the **headset bridge** for the device the participant is wearing first
    (`launch_bridge.bat` to scan, then e.g.
-   `launch_bridge.bat stream --model muse2 --address <address>`). Leave its window
+   `launch_bridge.bat stream --model muse-2 --address <address>`). Leave its window
    open; the status line should say `streaming` with low `% lost`. See
    [`docs/BLE_BRIDGE.md`](docs/BLE_BRIDGE.md).
 3. Open **Lab Recorder**. Confirm it has discovered:
-   - `Muse2-EEG` + `Muse2-PPG` (Muse 2) or `Muse-EEG` + `Muse-OPTICS` (Athena)
+   - `Muse-2-EEG` + `Muse-2-PPG` (Muse-2) or `Muse-Athena-EEG` + `Muse-Athena-OPTICS` (Muse-Athena)
    - The CGX AIM-II stream
    - `MuseProxyMarkers` (this app — note: it appears only *after* you launch the app)
 4. Launch **this app** (`launch.bat`). The GUI opens at the Intake screen.
@@ -62,14 +62,14 @@ If abort happens during Pass B, Pass A's data is already saved and untouched.
 ```
 Data\P001\
 ├── intake.json                     # visit-level intake
-├── pass_A_muse2\
+├── pass_A_muse-2\
 │   ├── session.json                # Pass A master record
 │   ├── markers.csv                 # CSV mirror of Pass A LSL markers
 │   ├── block_01_baseline.csv
 │   ├── block_02_paced_0p1Hz.csv
 │   ├── block_03_paced_0p2Hz.csv
 │   └── block_04_artifact.csv
-└── pass_B_athena\
+└── pass_B_muse-athena\
     └── (same structure)
 ```
 
@@ -91,11 +91,11 @@ The app does **not** enforce device order. Suggested assignment (operator's choi
 
 | Participant | Pass A | Pass B |
 |---|---|---|
-| P001 | Muse 2 | Muse Athena |
-| P002 | Muse Athena | Muse 2 |
-| P003 | Muse 2 | Muse Athena |
-| P004 | Muse Athena | Muse 2 |
-| P005 | Muse 2 | Muse Athena |
+| P001 | Muse-2 | Muse-Athena |
+| P002 | Muse-Athena | Muse-2 |
+| P003 | Muse-2 | Muse-Athena |
+| P004 | Muse-Athena | Muse-2 |
+| P005 | Muse-2 | Muse-Athena |
 
 (3 of one order, 2 of the other.)
 

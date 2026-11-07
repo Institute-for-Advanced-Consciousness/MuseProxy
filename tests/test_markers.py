@@ -191,9 +191,9 @@ def test_round_trip_every_marker_family(outlet: MuseProxyMarkerOutlet) -> None:
             hydration=True,
             warm=True,
         )
-        outlet.device_marker(pass_label="A", device="muse2")
-        outlet.device_marker(pass_label="B", device="athena")
-        outlet.pass_start(pass_label="A", device="muse2")
+        outlet.device_marker(pass_label="A", device="muse-2")
+        outlet.device_marker(pass_label="B", device="muse-athena")
+        outlet.pass_start(pass_label="A", device="muse-2")
         outlet.volume_check_start()
         outlet.volume_check_end(level="ok")
         outlet.settle_start(pass_label="A", duration_planned_s=300.0)

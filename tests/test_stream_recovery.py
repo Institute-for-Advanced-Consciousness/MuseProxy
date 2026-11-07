@@ -339,8 +339,8 @@ def test_override_marker_names_down_streams() -> None:
     app = _App()
     app.outlet = _Outlet()
     app.pass_label = "B"
-    app.monitor = _FakeMonitor({"Muse2-EEG|EEG": ALIVE, "Muse2-PPG|PPG": MISSING})
+    app.monitor = _FakeMonitor({"Muse-2-EEG|EEG": ALIVE, "Muse-2-PPG|PPG": MISSING})
     record_stream_override(app, "stream_override", 3, 2)
     event, payload = app.outlet.pushed[-1]
     assert event == "stream_override"
-    assert payload == {"block": 3, "attempt": 2, "pass": "B", "down": "Muse2-PPG|PPG"}
+    assert payload == {"block": 3, "attempt": 2, "pass": "B", "down": "Muse-2-PPG|PPG"}

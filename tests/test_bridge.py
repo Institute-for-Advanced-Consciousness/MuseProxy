@@ -150,7 +150,7 @@ def test_muse2_publisher_nan_timeline_and_monotonic():
         for uuid, raw in synth.due_packets(step * 0.05):
             pub.process(t_arrival + step * 0.05 + 0.02, uuid, raw)
     pub.close()
-    eeg = store["Muse2-EEG (T1)"]
+    eeg = store["Muse-2-EEG (T1)"]
     data, ts = eeg.data, np.asarray(eeg.ts)
     assert data.shape[1] == 4
     assert abs(data.shape[0] - 10 * 256) <= 48           # full timeline kept
@@ -161,7 +161,7 @@ def test_muse2_publisher_nan_timeline_and_monotonic():
     assert np.median(np.diff(ts)) == pytest.approx(1 / 256, rel=0.02)
     st = pub.stats()
     assert 2.0 < st["EEG"]["lost_pct"] < 9.0
-    ppg = store["Muse2-PPG (T1)"]
+    ppg = store["Muse-2-PPG (T1)"]
     assert ppg.data.shape[1] == 3 and ppg.kw["labels"] == ["AMBIENT", "IR", "RED"]
 
 
@@ -178,7 +178,7 @@ def test_muse2_publisher_reconnect_segment_keeps_time_moving():
         for uuid, raw in s2.due_packets(step * 0.05):
             pub.process(505 + step * 0.05, uuid, raw)
     pub.close()
-    ts = np.asarray(store["Muse2-EEG (T2)"].ts)
+    ts = np.asarray(store["Muse-2-EEG (T2)"].ts)
     assert (np.diff(ts) > 0).all()
     assert ts[-1] > 505  # second segment mapped onto its own arrival times
 
@@ -195,9 +195,9 @@ def test_athena_publisher_decodes_and_counts_gaps():
                 dropped += 1
                 continue
             pub.process(2000 + step * 0.05, "2026-11-06T00:00:00+00:00", uuid, raw)
-    eeg = store["Muse-EEG (A1)"]
+    eeg = store["Muse-Athena-EEG (A1)"]
     assert eeg.kw["stype"] == "EEG" and eeg.data.shape[1] == 4
-    assert store["Muse-OPTICS (A1)"].kw["stype"] == "PPG"
+    assert store["Muse-Athena-OPTICS (A1)"].kw["stype"] == "PPG"
     assert (np.diff(np.asarray(eeg.ts)) > 0).all()
     st = pub.stats()
     assert dropped > 0 and st["EEG"]["gap_samples"] > 0
@@ -214,7 +214,7 @@ def test_athena_gap_correction_restores_true_time():
                 if 60 <= step < 62:  # lose ~100 ms of packets
                     continue
                 pub.process(3000 + step * 0.05, "2026-11-06T00:00:00+00:00", uuid, raw)
-        return np.asarray(store["Muse-EEG (A2)"].ts), pub.stats()["EEG"]
+        return np.asarray(store["Muse-Athena-EEG (A2)"].ts), pub.stats()["EEG"]
 
     ts_raw, st = run(False)
     ts_fix, _ = run(True)
@@ -249,8 +249,8 @@ def test_encode_command_and_rejects_injection():
 
 
 def test_classify_and_device_id():
-    assert classify("Muse-1A2B") == "muse2"
-    assert classify("MuseS-0DBB") == "athena"
+    assert classify("Muse-1A2B") == "muse-2"
+    assert classify("MuseS-0DBB") == "muse-athena"
     assert classify("Fitbit") == "unknown"
     assert device_id_from("Muse-1a2b", "x") == "1A2B"
     assert device_id_from(None, "00:55:DA:B7:E0:14") == "E014"
@@ -282,7 +282,7 @@ def _wait(pred, timeout=8.0):
     return False
 
 
-@pytest.mark.parametrize("model", ["muse2", "athena"])
+@pytest.mark.parametrize("model", ["muse-2", "muse-athena"])
 def test_bridge_streams_and_logs_raw(model, tmp_path):
     ft = FakeTransport(model, drop_prob=0.02)
     b = DeviceBridge(_target(ft), BridgeConfig(**FAST), raw_dir=tmp_path, transport=ft)
@@ -297,7 +297,7 @@ def test_bridge_streams_and_logs_raw(model, tmp_path):
     assert len(lines) > 10
     utc, uuid, hexs = lines[-1].split("\t")
     assert len(bytes.fromhex(hexs)) > 0 and uuid.startswith("273e")
-    if model == "athena":
+    if model == "muse-athena":
         parsed = [parse_message(ln) for ln in lines]
         assert sum(len(p["EEG"]) for p in parsed) > 0  # OpenMuse-compatible
     assert b.raw.clock_path.read_text().count("\n") >= 2
@@ -305,7 +305,7 @@ def test_bridge_streams_and_logs_raw(model, tmp_path):
 
 
 def test_bridge_reconnects_after_drop():
-    ft = FakeTransport("muse2", scenarios={0: {"drop_after_s": 1.0}})
+    ft = FakeTransport("muse-2", scenarios={0: {"drop_after_s": 1.0}})
     b = DeviceBridge(_target(ft), BridgeConfig(**FAST), transport=ft)
     b.start()
     try:
@@ -318,11 +318,11 @@ def test_bridge_reconnects_after_drop():
 
 
 def test_bridge_lsl_end_to_end_nan_and_monotonic():
-    ft = FakeTransport("muse2", drop_prob=0.05, device_id="E2E1")
+    ft = FakeTransport("muse-2", drop_prob=0.05, device_id="E2E1")
     b = DeviceBridge(_target(ft), BridgeConfig(**FAST), transport=ft)
     b.start()
     try:
-        streams = pylsl.resolve_byprop("name", "Muse2-EEG (E2E1)", minimum=1, timeout=5)
+        streams = pylsl.resolve_byprop("name", "Muse-2-EEG (E2E1)", minimum=1, timeout=5)
         assert streams, "bridge EEG outlet not visible on LSL"
         inlet = pylsl.StreamInlet(streams[0])
         inlet.open_stream(timeout=3)

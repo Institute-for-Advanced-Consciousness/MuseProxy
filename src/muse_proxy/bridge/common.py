@@ -6,8 +6,8 @@ decode, handshake) live in ``muse2.py`` and ``athena.py``.
 Timing model (both devices)
 ---------------------------
 Each sample gets a *device time* — derived from the headset's own clock
-(Athena: 256 kHz tick counter in every packet) or from the packet sequence
-number at the nominal rate (Muse 2: a 16-bit per-characteristic counter, so
+(Muse-Athena: 256 kHz tick counter in every packet) or from the packet sequence
+number at the nominal rate (Muse-2: a 16-bit per-characteristic counter, so
 ``device_time = packet_index * samples_per_packet / fs``). Device time is then
 mapped onto the LSL clock by a windowed linear regression of
 ``(device_time, BLE arrival time)`` pairs. The regression absorbs crystal drift
@@ -159,6 +159,9 @@ def make_outlet(
     return pylsl.StreamOutlet(info, chunk_size=0, max_buffered=360)
 
 
+MODEL_LABELS = {"muse-2": "Muse-2", "muse-athena": "Muse-Athena"}
+
+
 class EventOutlet:
     """Irregular string stream of bridge lifecycle/health events.
 
@@ -168,7 +171,7 @@ class EventOutlet:
 
     def __init__(self, device_id: str, model: str) -> None:
         info = pylsl.StreamInfo(
-            name=f"MuseBridge-Events ({device_id})",
+            name=f"{MODEL_LABELS.get(model, model)}-BridgeEvents ({device_id})",
             type="BridgeEvents",
             channel_count=1,
             nominal_srate=0,
@@ -218,13 +221,13 @@ class RawPacketLog:
     """Every BLE notification, verbatim, in OpenMuse's line format.
 
     ``<utc_iso>\\t<characteristic_uuid>\\t<hex payload>`` — one line per
-    notification. For the Athena this file is directly readable by OpenMuse's
-    ``parse_message``; for the Muse 2 the same 3-column shape is used so one
+    notification. For the Muse-Athena this file is directly readable by OpenMuse's
+    ``parse_message``; for the Muse-2 the same 3-column shape is used so one
     reader handles both.
 
     A sidecar ``*_clock.csv`` records ``utc_iso, lsl_local_clock`` once per
     second so raw-log times can be mapped onto the XDF's LSL clock afterwards
-    (this is what was missing for the 2026 Athena logs).
+    (this is what was missing for the 2026 Muse-Athena logs).
 
     This log is the ground truth: if Lab Recorder or an LSL hop fails, the
     session can be fully re-decoded from it.

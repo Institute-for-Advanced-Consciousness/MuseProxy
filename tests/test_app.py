@@ -24,7 +24,7 @@ def test_show_stage_transitions(shared_app: Any) -> None:
     from muse_proxy.config import load_config
     shared_app.config = load_config()  # type: ignore[attr-defined]
     shared_app.pass_label = "A"
-    shared_app.pass_a_device = "muse2"
+    shared_app.pass_a_device = "muse-2"
     shared_app.show_stage("pre_launch")
     assert shared_app.current_stage == "pre_launch"
 

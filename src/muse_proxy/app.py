@@ -119,7 +119,7 @@ class App:
         # ----- visit state --------------------------------------------------
         self.participant_id: str | None = None
         self.pass_label: str = "A"  # flips to "B" at pass switch
-        self.pass_a_device: str | None = None  # "muse2" | "athena"
+        self.pass_a_device: str | None = None  # "muse-2" | "muse-athena"
         self.pass_b_device: str | None = None
         self.intake_payload: dict[str, Any] = {}
 

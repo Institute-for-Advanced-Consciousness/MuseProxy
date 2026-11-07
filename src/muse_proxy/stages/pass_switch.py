@@ -311,4 +311,4 @@ class PassSwitchFrame(StageFrame):
 
 
 def _pretty(device: str) -> str:
-    return {"muse2": "Muse 2", "athena": "Muse Athena"}.get(device, device)
+    return {"muse-2": "Muse-2", "muse-athena": "Muse-Athena"}.get(device, device)
